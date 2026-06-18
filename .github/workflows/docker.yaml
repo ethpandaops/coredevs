@@ -3,6 +3,11 @@ name: docker
 on:
   push:
     branches: [master]
+    paths-ignore:
+      - 'deploy/**'
+      - '**.md'
+      - '.golangci.yml'
+      - 'Makefile'
     tags: ['v*']
   workflow_dispatch:
 

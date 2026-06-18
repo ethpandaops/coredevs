@@ -13,7 +13,7 @@ image:
 # path (ArgoCD syncs git, not the registry). Short poll = low push→live latency.
 keel:
   enabled: true
-  pollSchedule: "@every 1m"
+  pollSchedule: "@every 3m"
 
 # Public ingress for the read-only API.
 # Convention: <app>.analytics.<env>.platform.ethpandaops.io
