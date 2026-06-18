@@ -80,6 +80,10 @@ teams:
     layer: cl
     protocolGuildSections: [Teku]
     githubOrgs: [] # candidate: Consensys (whole-company org — broad)
+    # members: manually-defined handles, always included in the superset. Use
+    # for people not yet in an upstream source (e.g. a new joiner awaiting a
+    # Protocol Guild listing). They appear with source "manual".
+    # members: [some-new-teku-dev]
 
   # --- Execution clients ---
   besu:

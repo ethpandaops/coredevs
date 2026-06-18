@@ -24,7 +24,7 @@ import (
 
 // errUnknownSource is returned when the ?source filter is not a recognised
 // source name.
-var errUnknownSource = errors.New("source must be one of protocol-guild, github-org")
+var errUnknownSource = errors.New("source must be one of protocol-guild, github-org, manual")
 
 // OrgResolver returns the public members of a GitHub organisation on demand.
 type OrgResolver interface {
@@ -306,6 +306,8 @@ func normalizeSource(s string) (string, error) {
 		return source.NameProtocolGuild, nil
 	case source.NameGitHubOrg, "github", "githuborg", "org":
 		return source.NameGitHubOrg, nil
+	case source.NameManual, "static":
+		return source.NameManual, nil
 	default:
 		return "", errUnknownSource
 	}

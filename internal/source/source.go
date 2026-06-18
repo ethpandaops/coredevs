@@ -9,6 +9,7 @@ import "context"
 const (
 	NameProtocolGuild = "protocol-guild"
 	NameGitHubOrg     = "github-org"
+	NameManual        = "manual"
 )
 
 // Membership is a single (handle, team) association discovered by a source.

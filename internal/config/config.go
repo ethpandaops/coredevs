@@ -80,6 +80,10 @@ type Team struct {
 	// GitHubOrgs are GitHub organisations whose public members belong to this
 	// team. Curated deliberately — broad umbrella orgs are left unset.
 	GitHubOrgs []string `yaml:"githubOrgs"`
+	// Members are manually-defined GitHub handles for this team, for people not
+	// yet reflected in an upstream source (e.g. a new joiner awaiting Protocol
+	// Guild listing). They are always included in the superset.
+	Members []string `yaml:"members"`
 }
 
 // Load reads and validates configuration from a YAML file, applying defaults.
@@ -130,6 +134,19 @@ func (c *Config) OrgTeams() map[string][]string {
 	for slug, team := range c.Teams {
 		for _, org := range team.GitHubOrgs {
 			out[org] = append(out[org], slug)
+		}
+	}
+
+	return out
+}
+
+// ManualMembers returns a map of team slug to its manually-defined handles,
+// including only teams that have any.
+func (c *Config) ManualMembers() map[string][]string {
+	out := make(map[string][]string, len(c.Teams))
+	for slug, team := range c.Teams {
+		if len(team.Members) > 0 {
+			out[slug] = team.Members
 		}
 	}
 

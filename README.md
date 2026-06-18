@@ -15,6 +15,7 @@ endpoint that refreshes itself.
 | --- | --- |
 | `protocol-guild` | Parses the [Protocol Guild membership document](https://github.com/protocolguild/documentation/blob/main/docs/01-membership.md) and maps each working-group section (Teku, Lighthouse, Geth, …) onto a canonical team. This is the precise per-client signal. |
 | `github-org` | Resolves the **public** members of a GitHub organisation (`GET /orgs/{org}/public_members`). Available on demand for any org; only folded into a team's superset when that team explicitly opts an org in (see below). |
+| `manual` | Static handles listed per team in config (`members:`). For people who belong to a team but aren't yet in an upstream source — e.g. a new joiner before they're added to Protocol Guild. Always included; not subject to rate limits or the member floor. |
 
 Sources refresh every `syncInterval` (default 3h). The last good result of each
 source is kept in memory, so a transient upstream outage never drops a team. The

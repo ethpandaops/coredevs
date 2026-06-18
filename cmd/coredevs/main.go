@@ -19,6 +19,7 @@ import (
 	"github.com/ethpandaops/coredevs/internal/index"
 	"github.com/ethpandaops/coredevs/internal/source"
 	"github.com/ethpandaops/coredevs/internal/source/githuborg"
+	manualsource "github.com/ethpandaops/coredevs/internal/source/manual"
 	"github.com/ethpandaops/coredevs/internal/source/protocolguild"
 	"github.com/ethpandaops/coredevs/internal/syncer"
 )
@@ -123,7 +124,11 @@ func run(ctx context.Context, configPath string) error {
 // buildSources constructs the enabled datasources from config. The GitHub org
 // client is returned separately so the API can resolve arbitrary orgs on demand.
 func buildSources(logger *slog.Logger, cfg *config.Config, httpClient *http.Client) ([]source.Source, *githuborg.Client) {
-	sources := make([]source.Source, 0, 2)
+	sources := make([]source.Source, 0, 3)
+
+	if manual := cfg.ManualMembers(); len(manual) > 0 {
+		sources = append(sources, manualsource.New(manual))
+	}
 
 	if cfg.Sources.ProtocolGuild.Enabled {
 		sources = append(sources, protocolguild.New(

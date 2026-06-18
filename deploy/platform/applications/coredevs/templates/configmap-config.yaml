@@ -27,4 +27,5 @@ data:
         layer: {{ $team.layer | default "" | quote }}
         protocolGuildSections: {{ toJson $team.protocolGuildSections }}
         githubOrgs: {{ toJson (default (list) $team.githubOrgs) }}
+        members: {{ toJson (default (list) $team.members) }}
       {{- end }}
