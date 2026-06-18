@@ -49,19 +49,19 @@ teams:
     kind: client
     layer: cl
     protocolGuildSections: [Grandine]
-    githubOrgs: [] # candidate: grandinetech
+    githubOrgs: [grandinetech]
   lighthouse:
     displayName: Lighthouse
     kind: client
     layer: cl
     protocolGuildSections: [Lighthouse]
-    githubOrgs: [] # candidate: sigp (Sigma Prime — also does security audits)
+    githubOrgs: [sigp]
   lodestar:
     displayName: Lodestar
     kind: client
     layer: cl
     protocolGuildSections: [Lodestar]
-    githubOrgs: [] # candidate: ChainSafe (multi-product company org)
+    githubOrgs: [ChainSafe]
   nimbus:
     displayName: Nimbus
     kind: client
@@ -97,13 +97,16 @@ teams:
     kind: client
     layer: el
     protocolGuildSections: [Erigon]
-    githubOrgs: [] # candidate: erigontech
+    githubOrgs: [erigontech]
   geth:
     displayName: Geth
     kind: client
     layer: el
     protocolGuildSections: [Geth]
-    githubOrgs: [] # candidate: ethereum (huge umbrella org — do not wire in)
+    # No org wired: geth has no dedicated org; the `ethereum` org is the EF
+    # umbrella (~130 members across EIPs/specs/solidity/research), not the geth
+    # team. Query it ad-hoc via /api/v1/orgs/ethereum/members if ever needed.
+    githubOrgs: []
   nethermind:
     displayName: Nethermind
     kind: client
@@ -184,3 +187,9 @@ teams:
     displayName: Funding + PG Operations
     kind: delivery
     protocolGuildSections: [Funding + PG Operations]
+
+  # --- ethPandaOps (not in Protocol Guild; sourced from the org) ---
+  ethpandaops:
+    displayName: ethPandaOps
+    kind: ops
+    githubOrgs: [ethpandaops]
