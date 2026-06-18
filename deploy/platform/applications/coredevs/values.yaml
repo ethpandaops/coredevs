@@ -88,6 +88,7 @@ teams:
   geth: { displayName: Geth, kind: client, layer: el, protocolGuildSections: [Geth], githubOrgs: [] } # `ethereum` org is the EF umbrella, not geth
   nethermind: { displayName: Nethermind, kind: client, layer: el, protocolGuildSections: [Nethermind], githubOrgs: [] }
   reth: { displayName: Reth, kind: client, layer: el, protocolGuildSections: [Reth], githubOrgs: [] }
+  ethrex: { displayName: ethrex, kind: client, layer: el, members: [edg-l, JereSalo, ilitteri, arkenan] } # no PG section; lambdaclass org is private — manual roster from glamsterdam-devnets
   # Research (Protocol Guild "Wayfinding")
   cryptography-research: { displayName: Cryptography Research, kind: research, protocolGuildSections: [Cryptography Research] }
   p2p-networking: { displayName: P2P Networking, kind: research, protocolGuildSections: [P2P Networking] }
