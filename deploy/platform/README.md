@@ -54,6 +54,12 @@ in). To enable it:
 
 - **StatefulSet, 1 replica, 1Gi `local-path` PVC** at `/data` holding the
   last-good index snapshot — there is no database.
-- The team registry lives in `values.yaml` (`teams:`) and is rendered into the
-  app's ConfigMap, so teams/org-wiring can change without rebuilding the image.
+- **The team registry is the repo's `config.yaml`, baked into the image** (run
+  with `--config=/app/config.yaml`) — the single source of truth. To change
+  teams/rosters/org-wiring: edit `config.yaml` at the repo root, push, and the
+  new image auto-deploys (see below). No ConfigMap, no platform-side duplicate.
+- **Auto-pull via Keel** (`@every 1m`, `pullPolicy: Always`): ArgoCD syncs git,
+  not the registry, so Keel watches `ghcr.io/ethpandaops/coredevs:latest` and
+  force-updates the pod when a new image lands. Push→live ≈ 3–4 min (build +
+  poll + rollout), fully automatic.
 - `/metrics` is scraped via the ServiceMonitor on the single HTTP port (8080).

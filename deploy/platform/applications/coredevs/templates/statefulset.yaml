@@ -21,8 +21,6 @@ spec:
     metadata:
       labels:
         {{- include "coredevs.selectorLabels" . | nindent 8 }}
-      annotations:
-        checksum/config: {{ include (print $.Template.BasePath "/configmap-config.yaml") . | sha256sum }}
     spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
@@ -34,18 +32,16 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      volumes:
-        - name: config
-          configMap:
-            name: {{ include "coredevs.fullname" . }}-config
       containers:
         - name: coredevs
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           securityContext:
             {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          # team registry + sources come from the image's baked /app/config.yaml
+          # (the repo's config.yaml) — the single source of truth.
           args:
-            - --config=/config/config.yaml
+            - --config=/app/config.yaml
           {{- if .Values.github.tokenEnabled }}
           env:
             - name: GITHUB_TOKEN
@@ -59,9 +55,6 @@ spec:
               containerPort: 8080
               protocol: TCP
           volumeMounts:
-            - name: config
-              mountPath: /config
-              readOnly: true
             - name: data
               mountPath: /data
           readinessProbe:
