@@ -26,9 +26,10 @@ h2{font-size:12px;font-family:var(--mono);text-transform:uppercase;letter-spacin
 .api .ex:last-child{border-bottom:0}
 .api .d{padding:13px 16px;color:var(--mut);border-right:1px solid var(--line);font-size:13px}
 .api .c{position:relative;background:var(--code);font-family:var(--mono);font-size:12.5px;
-        padding:13px 44px 13px 16px;overflow-x:auto;white-space:nowrap;display:flex;align-items:center}
+        padding:12px 48px 12px 16px;white-space:normal;overflow-wrap:anywhere;word-break:break-word}
+.api .c>span{display:block}
 .api .c .tok{color:var(--acc)}.api .c .mut{color:var(--faint)}
-.cp{position:absolute;right:8px;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:10px;
+.cp{position:absolute;right:8px;top:9px;font-family:var(--mono);font-size:10px;
     letter-spacing:.05em;text-transform:uppercase;background:#fff;border:1px solid var(--line);border-radius:4px;
     color:var(--mut);padding:3px 7px;cursor:pointer;opacity:0;transition:opacity .12s}
 .api .c:hover .cp{opacity:1}.cp:hover{border-color:var(--ink);color:var(--ink)}
