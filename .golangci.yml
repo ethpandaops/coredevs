@@ -1,0 +1,15 @@
+version: "2"
+
+linters:
+  enable:
+    - misspell
+    - revive
+    - unconvert
+    - prealloc
+    - nilerr
+    - bodyclose
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

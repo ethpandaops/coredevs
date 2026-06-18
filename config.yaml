@@ -1,0 +1,96 @@
+# coredevs service configuration.
+#
+# Each team maps onto upstream datasources. The API returns the superset of
+# handles across the sources configured for a team.
+
+http:
+  addr: ":8080"
+
+# How often the datasources are refreshed.
+syncInterval: 3h
+
+# Last-good index persisted here between restarts. Mounted from a PVC in k8s.
+snapshotPath: /data/index.json
+
+sources:
+  protocolGuild:
+    enabled: true
+    url: https://raw.githubusercontent.com/protocolguild/documentation/main/docs/01-membership.md
+  githubOrg:
+    enabled: true
+    baseURL: https://api.github.com
+    # Optional token (lifts the unauthenticated rate limit). Read from this env var.
+    tokenEnv: GITHUB_TOKEN
+
+# Canonical team registry.
+#
+# protocolGuildSections: working-group headers in the Protocol Guild document.
+#   This is the precise per-client signal and the default basis for the superset.
+# githubOrgs: orgs whose PUBLIC members are folded into this team's superset.
+#   Left empty by default: the obvious candidate orgs are whole-company orgs
+#   (Consensys, OffchainLabs, ChainSafe, status-im, NethermindEth, ...) whose
+#   public membership is far broader than the client dev team — wiring them in
+#   pollutes the superset with unrelated employees. Opt an org in here only once
+#   you've confirmed its membership ~= the team. Any org can always be queried
+#   ad-hoc, without wiring, via GET /api/v1/orgs/{org}/members.
+#
+# Candidate orgs per team are noted in comments for when you choose to opt in.
+teams:
+  # --- Consensus clients ---
+  grandine:
+    displayName: Grandine
+    layer: cl
+    protocolGuildSections: [Grandine]
+    githubOrgs: [] # candidate: grandinetech
+  lighthouse:
+    displayName: Lighthouse
+    layer: cl
+    protocolGuildSections: [Lighthouse]
+    githubOrgs: [] # candidate: sigp (Sigma Prime — also does security audits)
+  lodestar:
+    displayName: Lodestar
+    layer: cl
+    protocolGuildSections: [Lodestar]
+    githubOrgs: [] # candidate: ChainSafe (multi-product company org)
+  nimbus:
+    displayName: Nimbus
+    layer: cl
+    protocolGuildSections: [Nimbus]
+    githubOrgs: [] # candidate: status-im (multi-product company org)
+  prysm:
+    displayName: Prysm
+    layer: cl
+    protocolGuildSections: [Prysm]
+    githubOrgs: [] # candidate: OffchainLabs (also Arbitrum — broad)
+  teku:
+    displayName: Teku
+    layer: cl
+    protocolGuildSections: [Teku]
+    githubOrgs: [] # candidate: Consensys (whole-company org — broad)
+
+  # --- Execution clients ---
+  besu:
+    displayName: Besu
+    layer: el
+    protocolGuildSections: [Hyperledger Besu, Besu]
+    githubOrgs: [] # candidate: hyperledger (multi-project foundation org)
+  erigon:
+    displayName: Erigon
+    layer: el
+    protocolGuildSections: [Erigon]
+    githubOrgs: [] # candidate: erigontech
+  geth:
+    displayName: Geth
+    layer: el
+    protocolGuildSections: [Geth]
+    githubOrgs: [] # candidate: ethereum (huge umbrella org — do not wire in)
+  nethermind:
+    displayName: Nethermind
+    layer: el
+    protocolGuildSections: [Nethermind]
+    githubOrgs: [] # candidate: NethermindEth (also Juno/Starknet — broad)
+  reth:
+    displayName: Reth
+    layer: el
+    protocolGuildSections: [Reth]
+    githubOrgs: [] # candidate: paradigmxyz (multi-project org)
