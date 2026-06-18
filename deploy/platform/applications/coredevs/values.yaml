@@ -38,6 +38,10 @@ github:
   tokenEnabled: false
   token: <path:/secrets/clusters/primary/environment/primary.enc.yaml#coredevs | jsonPath {.github_token}>
 
+protocolGuild:
+  # Sanity floor: keep last-good if a parse yields fewer members than this.
+  minMembers: 50
+
 serviceMonitor:
   enabled: true
   scrapeInterval: 30s
@@ -68,16 +72,37 @@ tolerations: []
 
 # The canonical team registry served by the API. This is the deploy-time source
 # of truth (editable here without rebuilding the image). Mirrors the repo's
-# config.yaml team mapping. See that file for the org-wiring caveats.
+# config.yaml team mapping. See that file for the org-wiring caveats. `kind` is
+# one of client | research | coordination | delivery.
 teams:
-  grandine: { displayName: Grandine, layer: cl, protocolGuildSections: [Grandine], githubOrgs: [] }
-  lighthouse: { displayName: Lighthouse, layer: cl, protocolGuildSections: [Lighthouse], githubOrgs: [] }
-  lodestar: { displayName: Lodestar, layer: cl, protocolGuildSections: [Lodestar], githubOrgs: [] }
-  nimbus: { displayName: Nimbus, layer: cl, protocolGuildSections: [Nimbus], githubOrgs: [] }
-  prysm: { displayName: Prysm, layer: cl, protocolGuildSections: [Prysm], githubOrgs: [] }
-  teku: { displayName: Teku, layer: cl, protocolGuildSections: [Teku], githubOrgs: [] }
-  besu: { displayName: Besu, layer: el, protocolGuildSections: [Hyperledger Besu, Besu], githubOrgs: [] }
-  erigon: { displayName: Erigon, layer: el, protocolGuildSections: [Erigon], githubOrgs: [] }
-  geth: { displayName: Geth, layer: el, protocolGuildSections: [Geth], githubOrgs: [] }
-  nethermind: { displayName: Nethermind, layer: el, protocolGuildSections: [Nethermind], githubOrgs: [] }
-  reth: { displayName: Reth, layer: el, protocolGuildSections: [Reth], githubOrgs: [] }
+  # Consensus clients
+  grandine: { displayName: Grandine, kind: client, layer: cl, protocolGuildSections: [Grandine], githubOrgs: [] }
+  lighthouse: { displayName: Lighthouse, kind: client, layer: cl, protocolGuildSections: [Lighthouse], githubOrgs: [] }
+  lodestar: { displayName: Lodestar, kind: client, layer: cl, protocolGuildSections: [Lodestar], githubOrgs: [] }
+  nimbus: { displayName: Nimbus, kind: client, layer: cl, protocolGuildSections: [Nimbus], githubOrgs: [] }
+  prysm: { displayName: Prysm, kind: client, layer: cl, protocolGuildSections: [Prysm], githubOrgs: [] }
+  teku: { displayName: Teku, kind: client, layer: cl, protocolGuildSections: [Teku], githubOrgs: [] }
+  # Execution clients
+  besu: { displayName: Besu, kind: client, layer: el, protocolGuildSections: [Hyperledger Besu, Besu], githubOrgs: [] }
+  erigon: { displayName: Erigon, kind: client, layer: el, protocolGuildSections: [Erigon], githubOrgs: [] }
+  geth: { displayName: Geth, kind: client, layer: el, protocolGuildSections: [Geth], githubOrgs: [] }
+  nethermind: { displayName: Nethermind, kind: client, layer: el, protocolGuildSections: [Nethermind], githubOrgs: [] }
+  reth: { displayName: Reth, kind: client, layer: el, protocolGuildSections: [Reth], githubOrgs: [] }
+  # Research (Protocol Guild "Wayfinding")
+  cryptography-research: { displayName: Cryptography Research, kind: research, protocolGuildSections: [Cryptography Research] }
+  p2p-networking: { displayName: P2P Networking, kind: research, protocolGuildSections: [P2P Networking] }
+  protocol-architecture: { displayName: Protocol Architecture, kind: research, protocolGuildSections: [Protocol Architecture] }
+  protocol-consensus: { displayName: Protocol Consensus, kind: research, protocolGuildSections: [Protocol Consensus] }
+  protocol-prototyping: { displayName: Protocol Prototyping, kind: research, protocolGuildSections: [Protocol Prototyping] }
+  rig: { displayName: Robust Incentive Group (RIG), kind: research, protocolGuildSections: [Robust Incentive Group (RIG)] }
+  stateless-consensus: { displayName: Stateless Consensus, kind: research, protocolGuildSections: [Stateless Consensus] }
+  zkevm: { displayName: zkEVM, kind: research, protocolGuildSections: [zkEVM] }
+  # Spec coordination (Protocol Guild "Governance")
+  el-specs: { displayName: Execution Layer Specs + Coordination, kind: coordination, layer: el, protocolGuildSections: [Execution Layer Specs + Coordination] }
+  cl-specs: { displayName: Consensus Layer Specs + Coordination, kind: coordination, layer: cl, protocolGuildSections: [Consensus Layer Specs + Coordination] }
+  # Upgrade delivery (Protocol Guild "Upgrade Delivery")
+  devnets: { displayName: Dev/Testnets, kind: delivery, protocolGuildSections: [Dev/Testnets] }
+  testing: { displayName: Testing, kind: delivery, protocolGuildSections: [Testing] }
+  ethereumjs: { displayName: EthereumJS, kind: delivery, protocolGuildSections: [EthereumJS] }
+  security: { displayName: Security, kind: delivery, protocolGuildSections: [Security] }
+  pg-operations: { displayName: Funding + PG Operations, kind: delivery, protocolGuildSections: [Funding + PG Operations] }

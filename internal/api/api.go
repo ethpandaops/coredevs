@@ -100,17 +100,24 @@ func (h *Handler) handleTeams(w http.ResponseWriter, r *http.Request) {
 	type teamSummary struct {
 		Slug        string         `json:"slug"`
 		DisplayName string         `json:"displayName,omitempty"`
+		Kind        string         `json:"kind,omitempty"`
 		Layer       string         `json:"layer,omitempty"`
 		Count       int            `json:"count"`
 		Counts      map[string]int `json:"counts"`
 	}
 
+	kindFilter := r.URL.Query().Get("kind")
+
 	summaries := make([]teamSummary, 0, len(h.cfg.Teams))
 	for slug, team := range h.cfg.Teams {
+		if kindFilter != "" && team.Kind != kindFilter {
+			continue
+		}
 		members := idx.Members(slug, "")
 		summaries = append(summaries, teamSummary{
 			Slug:        slug,
 			DisplayName: team.DisplayName,
+			Kind:        team.Kind,
 			Layer:       team.Layer,
 			Count:       len(members),
 			Counts:      countBySource(members),

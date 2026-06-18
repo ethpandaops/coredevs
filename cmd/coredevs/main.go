@@ -64,8 +64,13 @@ func run(ctx context.Context, configPath string) error {
 
 	sources, orgClient := buildSources(logger, cfg, httpClient)
 
+	floors := map[string]int{
+		source.NameProtocolGuild: cfg.Sources.ProtocolGuild.MinMembers,
+		source.NameGitHubOrg:     cfg.Sources.GitHubOrg.MinMembers,
+	}
+
 	store := index.NewStore()
-	sync := syncer.New(logger, store, sources, cfg.SyncInterval, cfg.SnapshotPath)
+	sync := syncer.New(logger, store, sources, cfg.SyncInterval, cfg.SnapshotPath, floors)
 
 	if err := sync.Start(ctx); err != nil {
 		logger.ErrorContext(ctx, "failed to start syncer", slog.Any("error", err))

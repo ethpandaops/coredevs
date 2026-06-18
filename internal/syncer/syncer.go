@@ -5,6 +5,7 @@ package syncer
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -21,6 +22,7 @@ type Syncer struct {
 	sources  []source.Source
 	interval time.Duration
 	snapshot string
+	floors   map[string]int
 
 	mu       sync.Mutex
 	lastGood map[string][]source.Membership
@@ -45,14 +47,17 @@ type SourceStatus struct {
 }
 
 // New constructs a Syncer. snapshot is an optional path for last-good
-// persistence; an empty string disables it.
-func New(logger *slog.Logger, store *index.Store, sources []source.Source, interval time.Duration, snapshot string) *Syncer {
+// persistence; an empty string disables it. floors maps a source name to a
+// minimum membership count below which a fetch is treated as a soft failure; a
+// missing or zero entry disables the floor for that source.
+func New(logger *slog.Logger, store *index.Store, sources []source.Source, interval time.Duration, snapshot string, floors map[string]int) *Syncer {
 	return &Syncer{
 		logger:   logger.With(slog.String("component", "syncer")),
 		store:    store,
 		sources:  sources,
 		interval: interval,
 		snapshot: snapshot,
+		floors:   floors,
 		lastGood: make(map[string][]source.Membership, len(sources)),
 		status:   make(map[string]*SourceStatus, len(sources)),
 		done:     make(chan struct{}),
@@ -182,6 +187,17 @@ func (s *Syncer) fetchOne(ctx context.Context, src source.Source) (memberships [
 		s.logger.ErrorContext(ctx, "source fetch failed",
 			slog.String("source", name),
 			slog.Any("error", err),
+		)
+
+		return s.lastGoodFor(name), false
+	}
+
+	if floor := s.floors[name]; floor > 0 && len(memberships) < floor {
+		status.LastError = fmt.Sprintf("fetched %d members, below floor of %d — keeping last good", len(memberships), floor)
+		s.logger.ErrorContext(ctx, "source below member floor",
+			slog.String("source", name),
+			slog.Int("members", len(memberships)),
+			slog.Int("floor", floor),
 		)
 
 		return s.lastGoodFor(name), false

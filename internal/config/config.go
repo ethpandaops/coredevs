@@ -45,6 +45,11 @@ type ProtocolGuild struct {
 	Enabled bool `yaml:"enabled"`
 	// URL is the raw membership markdown document.
 	URL string `yaml:"url"`
+	// MinMembers is a sanity floor: if a fetch parses fewer than this many
+	// members, it is treated as a soft failure and the last good result is kept,
+	// guarding against an upstream format change silently gutting the index. 0
+	// disables the floor.
+	MinMembers int `yaml:"minMembers"`
 }
 
 // GitHubOrg configures the GitHub public-org-membership source.
@@ -56,12 +61,17 @@ type GitHubOrg struct {
 	// TokenEnv is the environment variable holding a GitHub token. A token is
 	// optional for public data but lifts the unauthenticated rate limit.
 	TokenEnv string `yaml:"tokenEnv"`
+	// MinMembers is a sanity floor; see ProtocolGuild.MinMembers. 0 disables it.
+	MinMembers int `yaml:"minMembers"`
 }
 
 // Team describes a canonical team and how it maps onto upstream sources.
 type Team struct {
 	// DisplayName is a human-readable label.
 	DisplayName string `yaml:"displayName"`
+	// Kind groups teams by role: "client", "research", "coordination",
+	// "delivery", or "" if unclassified.
+	Kind string `yaml:"kind"`
 	// Layer is the client layer: "cl", "el", or "" for non-client teams.
 	Layer string `yaml:"layer"`
 	// ProtocolGuildSections are the Protocol Guild working-group headers that
@@ -155,6 +165,12 @@ func (c *Config) validate() error {
 	for slug, team := range c.Teams {
 		if team.Layer != "" && team.Layer != "cl" && team.Layer != "el" {
 			return fmt.Errorf("team %q: layer must be one of cl, el, or empty, got %q", slug, team.Layer)
+		}
+
+		switch team.Kind {
+		case "", "client", "research", "coordination", "delivery":
+		default:
+			return fmt.Errorf("team %q: kind must be one of client, research, coordination, delivery, or empty, got %q", slug, team.Kind)
 		}
 	}
 

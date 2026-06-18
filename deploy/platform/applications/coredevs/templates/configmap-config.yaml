@@ -14,6 +14,7 @@ data:
       protocolGuild:
         enabled: true
         url: https://raw.githubusercontent.com/protocolguild/documentation/main/docs/01-membership.md
+        minMembers: {{ .Values.protocolGuild.minMembers | default 50 }}
       githubOrg:
         enabled: true
         baseURL: https://api.github.com
@@ -22,7 +23,8 @@ data:
       {{- range $slug, $team := .Values.teams }}
       {{ $slug }}:
         displayName: {{ $team.displayName | quote }}
-        layer: {{ $team.layer | quote }}
+        kind: {{ $team.kind | default "" | quote }}
+        layer: {{ $team.layer | default "" | quote }}
         protocolGuildSections: {{ toJson $team.protocolGuildSections }}
         githubOrgs: {{ toJson (default (list) $team.githubOrgs) }}
       {{- end }}

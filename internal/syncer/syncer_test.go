@@ -39,7 +39,7 @@ func newTestSyncer(t *testing.T, src source.Source, snapshot string) (*Syncer, *
 	t.Helper()
 	store := index.NewStore()
 
-	return New(slog.Default(), store, []source.Source{src}, time.Hour, snapshot), store
+	return New(slog.Default(), store, []source.Source{src}, time.Hour, snapshot, nil), store
 }
 
 func TestStartSeedsFromSnapshotWhenSyncDegrades(t *testing.T) {
@@ -79,6 +79,34 @@ func TestSyncPublishesFreshDataOverSnapshot(t *testing.T) {
 	require.Len(t, st, 1)
 	assert.Equal(t, 1, st[0].Members)
 	assert.Empty(t, st[0].LastError)
+}
+
+func TestMemberFloorRejectsDegradedFetch(t *testing.T) {
+	src := &fakeSource{
+		name:    source.NameProtocolGuild,
+		members: []source.Membership{{Handle: "a", Team: "teku", Source: source.NameProtocolGuild}},
+	}
+	store := index.NewStore()
+	s := New(slog.Default(), store, []source.Source{src}, time.Hour, "",
+		map[string]int{source.NameProtocolGuild: 3})
+
+	require.NoError(t, s.Start(context.Background()))
+	t.Cleanup(func() { _ = s.Stop() })
+
+	// First fetch (1 member) is below the floor of 3, so nothing is published.
+	assert.Nil(t, store.Get().Members("teku", ""))
+	st := s.Statuses()
+	require.Len(t, st, 1)
+	assert.Contains(t, st[0].LastError, "below floor")
+
+	// A healthy fetch (3 members) clears the floor and publishes.
+	src.members = []source.Membership{
+		{Handle: "a", Team: "teku", Source: source.NameProtocolGuild},
+		{Handle: "b", Team: "teku", Source: source.NameProtocolGuild},
+		{Handle: "c", Team: "teku", Source: source.NameProtocolGuild},
+	}
+	s.Sync(context.Background())
+	assert.Len(t, store.Get().Members("teku", ""), 3)
 }
 
 func TestSyncKeepsLastGoodOnLaterFailure(t *testing.T) {

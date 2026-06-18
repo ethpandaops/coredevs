@@ -37,9 +37,14 @@ can always be queried ad-hoc via `/api/v1/orgs/{org}/members` without wiring.
 
 ## API
 
+Teams span four `kind`s — `client` (the 11 EL/CL clients), `research`,
+`coordination` (EL/CL spec coordination), and `delivery` (testing, devnets,
+security, …) — mirroring the Protocol Guild working groups. Filter with
+`/api/v1/teams?kind=client` to get just the client teams.
+
 | Method & path | Description |
 | --- | --- |
-| `GET /api/v1/teams` | All teams with per-source member counts. |
+| `GET /api/v1/teams` | All teams with per-source member counts. `?kind=` filters by role. |
 | `GET /api/v1/users/{team}` | The superset of handles for a team. |
 | `GET /api/v1/handles/{handle}` | Reverse lookup: every team a handle appears on. |
 | `GET /api/v1/orgs/{org}/members` | Public members of an arbitrary GitHub org, on demand. |

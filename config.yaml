@@ -16,11 +16,16 @@ sources:
   protocolGuild:
     enabled: true
     url: https://raw.githubusercontent.com/protocolguild/documentation/main/docs/01-membership.md
+    # Sanity floor: if a parse yields fewer than this many members (e.g. the
+    # upstream markdown format changed), keep the last good result instead of
+    # publishing a gutted index. The document currently has ~250 members.
+    minMembers: 50
   githubOrg:
     enabled: true
     baseURL: https://api.github.com
     # Optional token (lifts the unauthenticated rate limit). Read from this env var.
     tokenEnv: GITHUB_TOKEN
+    minMembers: 0
 
 # Canonical team registry.
 #
@@ -35,35 +40,43 @@ sources:
 #   ad-hoc, without wiring, via GET /api/v1/orgs/{org}/members.
 #
 # Candidate orgs per team are noted in comments for when you choose to opt in.
+# kind groups teams by role so consumers can filter (e.g. /api/v1/teams?kind=client):
+#   client | research | coordination | delivery
 teams:
   # --- Consensus clients ---
   grandine:
     displayName: Grandine
+    kind: client
     layer: cl
     protocolGuildSections: [Grandine]
     githubOrgs: [] # candidate: grandinetech
   lighthouse:
     displayName: Lighthouse
+    kind: client
     layer: cl
     protocolGuildSections: [Lighthouse]
     githubOrgs: [] # candidate: sigp (Sigma Prime — also does security audits)
   lodestar:
     displayName: Lodestar
+    kind: client
     layer: cl
     protocolGuildSections: [Lodestar]
     githubOrgs: [] # candidate: ChainSafe (multi-product company org)
   nimbus:
     displayName: Nimbus
+    kind: client
     layer: cl
     protocolGuildSections: [Nimbus]
     githubOrgs: [] # candidate: status-im (multi-product company org)
   prysm:
     displayName: Prysm
+    kind: client
     layer: cl
     protocolGuildSections: [Prysm]
     githubOrgs: [] # candidate: OffchainLabs (also Arbitrum — broad)
   teku:
     displayName: Teku
+    kind: client
     layer: cl
     protocolGuildSections: [Teku]
     githubOrgs: [] # candidate: Consensys (whole-company org — broad)
@@ -71,26 +84,99 @@ teams:
   # --- Execution clients ---
   besu:
     displayName: Besu
+    kind: client
     layer: el
     protocolGuildSections: [Hyperledger Besu, Besu]
     githubOrgs: [] # candidate: hyperledger (multi-project foundation org)
   erigon:
     displayName: Erigon
+    kind: client
     layer: el
     protocolGuildSections: [Erigon]
     githubOrgs: [] # candidate: erigontech
   geth:
     displayName: Geth
+    kind: client
     layer: el
     protocolGuildSections: [Geth]
     githubOrgs: [] # candidate: ethereum (huge umbrella org — do not wire in)
   nethermind:
     displayName: Nethermind
+    kind: client
     layer: el
     protocolGuildSections: [Nethermind]
     githubOrgs: [] # candidate: NethermindEth (also Juno/Starknet — broad)
   reth:
     displayName: Reth
+    kind: client
     layer: el
     protocolGuildSections: [Reth]
     githubOrgs: [] # candidate: paradigmxyz (multi-project org)
+
+  # --- Research (Protocol Guild "Wayfinding") ---
+  cryptography-research:
+    displayName: Cryptography Research
+    kind: research
+    protocolGuildSections: [Cryptography Research]
+  p2p-networking:
+    displayName: P2P Networking
+    kind: research
+    protocolGuildSections: [P2P Networking]
+  protocol-architecture:
+    displayName: Protocol Architecture
+    kind: research
+    protocolGuildSections: [Protocol Architecture]
+  protocol-consensus:
+    displayName: Protocol Consensus
+    kind: research
+    protocolGuildSections: [Protocol Consensus]
+  protocol-prototyping:
+    displayName: Protocol Prototyping
+    kind: research
+    protocolGuildSections: [Protocol Prototyping]
+  rig:
+    displayName: Robust Incentive Group (RIG)
+    kind: research
+    protocolGuildSections: [Robust Incentive Group (RIG)]
+  stateless-consensus:
+    displayName: Stateless Consensus
+    kind: research
+    protocolGuildSections: [Stateless Consensus]
+  zkevm:
+    displayName: zkEVM
+    kind: research
+    protocolGuildSections: [zkEVM]
+
+  # --- Spec coordination (Protocol Guild "Governance") ---
+  el-specs:
+    displayName: Execution Layer Specs + Coordination
+    kind: coordination
+    layer: el
+    protocolGuildSections: [Execution Layer Specs + Coordination]
+  cl-specs:
+    displayName: Consensus Layer Specs + Coordination
+    kind: coordination
+    layer: cl
+    protocolGuildSections: [Consensus Layer Specs + Coordination]
+
+  # --- Upgrade delivery (Protocol Guild "Upgrade Delivery") ---
+  devnets:
+    displayName: Dev/Testnets
+    kind: delivery
+    protocolGuildSections: [Dev/Testnets]
+  testing:
+    displayName: Testing
+    kind: delivery
+    protocolGuildSections: [Testing]
+  ethereumjs:
+    displayName: EthereumJS
+    kind: delivery
+    protocolGuildSections: [EthereumJS]
+  security:
+    displayName: Security
+    kind: delivery
+    protocolGuildSections: [Security]
+  pg-operations:
+    displayName: Funding + PG Operations
+    kind: delivery
+    protocolGuildSections: [Funding + PG Operations]
