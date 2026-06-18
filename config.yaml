@@ -50,40 +50,42 @@ teams:
     layer: cl
     protocolGuildSections: [Grandine]
     githubOrgs: [] # candidate: grandinetech
+    members: [] # Add manual github users here
   lighthouse:
     displayName: Lighthouse
     kind: client
     layer: cl
     protocolGuildSections: [Lighthouse]
     githubOrgs: [] # candidate: sigp (Sigma Prime — over-includes the security arm)
+    members: [] # Add manual github users here
   lodestar:
     displayName: Lodestar
     kind: client
     layer: cl
     protocolGuildSections: [Lodestar]
     githubOrgs: [] # candidate: ChainSafe (multi-product company org)
+    members: [] # Add manual github users here
   nimbus:
     displayName: Nimbus
     kind: client
     layer: cl
     protocolGuildSections: [Nimbus]
     githubOrgs: [] # candidate: status-im (multi-product company org)
+    members: [] # Add manual github users here
   prysm:
     displayName: Prysm
     kind: client
     layer: cl
     protocolGuildSections: [Prysm]
     githubOrgs: [] # candidate: OffchainLabs (also Arbitrum — broad)
+    members: [] # Add manual github users here
   teku:
     displayName: Teku
     kind: client
     layer: cl
     protocolGuildSections: [Teku]
     githubOrgs: [] # candidate: Consensys (whole-company org — broad)
-    # members: manually-defined handles, always included in the superset. Use
-    # for people not yet in an upstream source (e.g. a new joiner awaiting a
-    # Protocol Guild listing). They appear with source "manual".
-    # members: [some-new-teku-dev]
+    members: [] # Add manual github users here
 
   # --- Execution clients ---
   besu:
@@ -92,33 +94,36 @@ teams:
     layer: el
     protocolGuildSections: [Hyperledger Besu, Besu]
     githubOrgs: [] # candidate: hyperledger (multi-project foundation org)
+    members: [] # Add manual github users here
   erigon:
     displayName: Erigon
     kind: client
     layer: el
     protocolGuildSections: [Erigon]
     githubOrgs: [] # candidate: erigontech
+    members: [] # Add manual github users here
   geth:
     displayName: Geth
     kind: client
     layer: el
     protocolGuildSections: [Geth]
     # No org wired: geth has no dedicated org; the `ethereum` org is the EF
-    # umbrella (~130 members across EIPs/specs/solidity/research), not the geth
-    # team. Query it ad-hoc via /api/v1/orgs/ethereum/members if ever needed.
     githubOrgs: []
+    members: [] # Add manual github users here
   nethermind:
     displayName: Nethermind
     kind: client
     layer: el
     protocolGuildSections: [Nethermind]
     githubOrgs: [] # candidate: NethermindEth (also Juno/Starknet — broad)
+    members: [] # Add manual github users here
   reth:
     displayName: Reth
     kind: client
     layer: el
     protocolGuildSections: [Reth]
     githubOrgs: [] # candidate: paradigmxyz (multi-project org)
+    members: [] # Add manual github users here
   ethrex:
     displayName: ethrex
     kind: client
@@ -133,34 +138,42 @@ teams:
     displayName: Cryptography Research
     kind: research
     protocolGuildSections: [Cryptography Research]
+    members: [] # Add manual github users here
   p2p-networking:
     displayName: P2P Networking
     kind: research
     protocolGuildSections: [P2P Networking]
+    members: [] # Add manual github users here
   protocol-architecture:
     displayName: Protocol Architecture
     kind: research
     protocolGuildSections: [Protocol Architecture]
+    members: [] # Add manual github users here
   protocol-consensus:
     displayName: Protocol Consensus
     kind: research
     protocolGuildSections: [Protocol Consensus]
+    members: [] # Add manual github users here
   protocol-prototyping:
     displayName: Protocol Prototyping
     kind: research
     protocolGuildSections: [Protocol Prototyping]
+    members: [] # Add manual github users here
   rig:
     displayName: Robust Incentive Group (RIG)
     kind: research
     protocolGuildSections: [Robust Incentive Group (RIG)]
+    members: [] # Add manual github users here
   stateless-consensus:
     displayName: Stateless Consensus
     kind: research
     protocolGuildSections: [Stateless Consensus]
+    members: [] # Add manual github users here
   zkevm:
     displayName: zkEVM
     kind: research
     protocolGuildSections: [zkEVM]
+    members: [] # Add manual github users here
 
   # --- Spec coordination (Protocol Guild "Governance") ---
   el-specs:
@@ -168,36 +181,44 @@ teams:
     kind: coordination
     layer: el
     protocolGuildSections: [Execution Layer Specs + Coordination]
+    members: [] # Add manual github users here
   cl-specs:
     displayName: Consensus Layer Specs + Coordination
     kind: coordination
     layer: cl
     protocolGuildSections: [Consensus Layer Specs + Coordination]
+    members: [] # Add manual github users here
 
   # --- Upgrade delivery (Protocol Guild "Upgrade Delivery") ---
   devnets:
     displayName: Dev/Testnets
     kind: delivery
     protocolGuildSections: [Dev/Testnets]
+    members: [] # Add manual github users here
   testing:
     displayName: Testing
     kind: delivery
     protocolGuildSections: [Testing]
+    members: [] # Add manual github users here
   ethereumjs:
     displayName: EthereumJS
     kind: delivery
     protocolGuildSections: [EthereumJS]
+    members: [] # Add manual github users here
   security:
     displayName: Security
     kind: delivery
     protocolGuildSections: [Security]
+    members: [] # Add manual github users here
   pg-operations:
     displayName: Funding + PG Operations
     kind: delivery
     protocolGuildSections: [Funding + PG Operations]
+    members: [] # Add manual github users here
 
   # --- ethPandaOps (not in Protocol Guild; sourced from the org) ---
   ethpandaops:
     displayName: ethPandaOps
     kind: delivery
     githubOrgs: [ethpandaops]
+    members: [] # Add manual github users here
