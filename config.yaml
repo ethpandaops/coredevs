@@ -126,7 +126,7 @@ teams:
     # Not in Protocol Guild, and the lambdaclass org is fully private (0 public
     # members) so neither a PG section nor an org gives us the team. Defined
     # manually from the maintainer list in glamsterdam-devnets group_vars.
-    members: [edg-l, JereSalo, ilitteri, arkenan]
+    members: [edg-l, JereSalo, ilitteri, arkenan, iovoid]
 
   # --- Research (Protocol Guild "Wayfinding") ---
   cryptography-research:
