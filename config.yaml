@@ -49,19 +49,19 @@ teams:
     kind: client
     layer: cl
     protocolGuildSections: [Grandine]
-    githubOrgs: [grandinetech]
+    githubOrgs: [] # candidate: grandinetech
   lighthouse:
     displayName: Lighthouse
     kind: client
     layer: cl
     protocolGuildSections: [Lighthouse]
-    githubOrgs: [sigp]
+    githubOrgs: [] # candidate: sigp (Sigma Prime — over-includes the security arm)
   lodestar:
     displayName: Lodestar
     kind: client
     layer: cl
     protocolGuildSections: [Lodestar]
-    githubOrgs: [ChainSafe]
+    githubOrgs: [] # candidate: ChainSafe (multi-product company org)
   nimbus:
     displayName: Nimbus
     kind: client
@@ -97,7 +97,7 @@ teams:
     kind: client
     layer: el
     protocolGuildSections: [Erigon]
-    githubOrgs: [erigontech]
+    githubOrgs: [] # candidate: erigontech
   geth:
     displayName: Geth
     kind: client
@@ -191,5 +191,5 @@ teams:
   # --- ethPandaOps (not in Protocol Guild; sourced from the org) ---
   ethpandaops:
     displayName: ethPandaOps
-    kind: ops
+    kind: delivery
     githubOrgs: [ethpandaops]

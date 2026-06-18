@@ -71,6 +71,27 @@ func TestLookup(t *testing.T) {
 	assert.Empty(t, idx.Lookup("unknown"))
 }
 
+func TestUsersDedupesAcrossTeams(t *testing.T) {
+	idx := Build(time.Now().UTC(), []source.Membership{
+		{Handle: "marcopolo", Team: "lighthouse", Source: source.NameProtocolGuild},
+		// Same person, different team, different casing, different source.
+		{Handle: "MarcoPolo", Team: "prysm", Source: source.NameGitHubOrg, Org: "OffchainLabs"},
+		{Handle: "rolfyone", Team: "teku", Source: source.NameProtocolGuild, Name: "Paul Harris"},
+	})
+
+	users := idx.Users()
+	require.Len(t, users, 2, "marcopolo collapsed to one user across two teams")
+
+	// Sorted by handle: marcopolo, rolfyone.
+	mp := users[0]
+	assert.Equal(t, "marcopolo", mp.Handle, "first-seen casing preserved")
+	assert.Equal(t, []string{"lighthouse", "prysm"}, mp.Teams)
+	assert.Equal(t, []string{source.NameGitHubOrg, source.NameProtocolGuild}, mp.Sources)
+	assert.Equal(t, []string{"OffchainLabs"}, mp.Orgs)
+
+	assert.Equal(t, "Paul Harris", users[1].Name)
+}
+
 func TestStoreAtomicSwap(t *testing.T) {
 	s := NewStore()
 	assert.Nil(t, s.Get())

@@ -57,10 +57,13 @@ func New(logger *slog.Logger, cfg *config.Config, store *index.Store, sync *sync
 	registry := prometheus.NewRegistry()
 	registry.MustRegister(newCollector(store, sync))
 
+	h.mux.HandleFunc("GET /{$}", h.handleIndex)
+	h.mux.HandleFunc("GET /team/{slug}", h.handleIndex)
 	h.mux.HandleFunc("GET /healthz", h.handleHealthz)
 	h.mux.HandleFunc("GET /readyz", h.handleReadyz)
 	h.mux.Handle("GET /metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
 	h.mux.HandleFunc("GET /api/v1/teams", h.handleTeams)
+	h.mux.HandleFunc("GET /api/v1/users", h.handleAllUsers)
 	h.mux.HandleFunc("GET /api/v1/users/{team}", h.handleUsers)
 	h.mux.HandleFunc("GET /api/v1/handles/{handle}", h.handleHandle)
 	h.mux.HandleFunc("GET /api/v1/orgs/{org}/members", h.handleOrgMembers)
@@ -174,6 +177,68 @@ func (h *Handler) handleUsers(w http.ResponseWriter, r *http.Request) {
 	default:
 		h.writeError(w, r, http.StatusBadRequest, "format must be one of json, txt, yaml")
 	}
+}
+
+func (h *Handler) handleAllUsers(w http.ResponseWriter, r *http.Request) {
+	idx := h.store.Get()
+	if idx == nil {
+		h.writeError(w, r, http.StatusServiceUnavailable, "index not ready")
+
+		return
+	}
+
+	sourceFilter, err := normalizeSource(r.URL.Query().Get("source"))
+	if err != nil {
+		h.writeError(w, r, http.StatusBadRequest, err.Error())
+
+		return
+	}
+
+	kindFilter := r.URL.Query().Get("kind")
+
+	users := make([]*index.User, 0)
+	for _, u := range idx.Users() {
+		if sourceFilter != "" && !contains(u.Sources, sourceFilter) {
+			continue
+		}
+		if kindFilter != "" && !h.userInKind(u, kindFilter) {
+			continue
+		}
+		users = append(users, u)
+	}
+
+	handles := make([]string, 0, len(users))
+	for _, u := range users {
+		handles = append(handles, u.Handle)
+	}
+
+	switch r.URL.Query().Get("format") {
+	case "", "json":
+		h.writeJSON(w, r, http.StatusOK, map[string]any{
+			"generatedAt": idx.GeneratedAt,
+			"source":      sourceOrAll(sourceFilter),
+			"count":       len(handles),
+			"handles":     handles,
+			"users":       users,
+		})
+	case "txt":
+		writeText(w, http.StatusOK, strings.Join(handles, "\n")+"\n")
+	case "yaml":
+		h.writeYAML(w, r, handles)
+	default:
+		h.writeError(w, r, http.StatusBadRequest, "format must be one of json, txt, yaml")
+	}
+}
+
+// userInKind reports whether a user belongs to any team of the given kind.
+func (h *Handler) userInKind(u *index.User, kind string) bool {
+	for _, slug := range u.Teams {
+		if t, ok := h.cfg.Teams[slug]; ok && t.Kind == kind {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (h *Handler) handleHandle(w http.ResponseWriter, r *http.Request) {
@@ -330,6 +395,16 @@ func countBySource(members []*index.Member) map[string]int {
 	}
 
 	return counts
+}
+
+func contains(s []string, v string) bool {
+	for _, e := range s {
+		if e == v {
+			return true
+		}
+	}
+
+	return false
 }
 
 func handlesOf(members []*index.Member) []string {

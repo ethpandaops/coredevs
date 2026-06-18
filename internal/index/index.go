@@ -40,6 +40,20 @@ type Member struct {
 	Orgs []string `json:"orgs,omitempty"`
 }
 
+// User is a single developer aggregated across every team they appear on.
+type User struct {
+	// Handle is the GitHub login in its first-seen display casing.
+	Handle string `json:"handle"`
+	// Name is a display name if any source provided one.
+	Name string `json:"name,omitempty"`
+	// Teams are the team slugs this user belongs to, sorted.
+	Teams []string `json:"teams"`
+	// Sources are the source names that contributed this user, sorted.
+	Sources []string `json:"sources"`
+	// Orgs are the GitHub orgs this user was discovered through, sorted.
+	Orgs []string `json:"orgs,omitempty"`
+}
+
 // Store holds the current Index and swaps it atomically on each successful sync.
 type Store struct {
 	current atomic.Pointer[Index]
@@ -128,6 +142,49 @@ func (i *Index) Members(team, sourceFilter string) []*Member {
 			continue
 		}
 		out = append(out, m)
+	}
+
+	sort.Slice(out, func(a, b int) bool {
+		return strings.ToLower(out[a].Handle) < strings.ToLower(out[b].Handle)
+	})
+
+	return out
+}
+
+// Users returns every developer across all teams, deduplicated case-insensitively
+// by handle, with their teams, sources and orgs folded together and sorted by
+// handle. This is the people-centric view of the registry.
+func (i *Index) Users() []*User {
+	agg := make(map[string]*User, 0)
+
+	for slug, team := range i.Teams {
+		for key, m := range team.Members {
+			u, ok := agg[key]
+			if !ok {
+				u = &User{Handle: m.Handle, Name: m.Name}
+				agg[key] = u
+			}
+
+			if u.Name == "" && m.Name != "" {
+				u.Name = m.Name
+			}
+
+			u.Teams = appendUnique(u.Teams, slug)
+			for _, s := range m.Sources {
+				u.Sources = appendUnique(u.Sources, s)
+			}
+			for _, o := range m.Orgs {
+				u.Orgs = appendUnique(u.Orgs, o)
+			}
+		}
+	}
+
+	out := make([]*User, 0, len(agg))
+	for _, u := range agg {
+		sort.Strings(u.Teams)
+		sort.Strings(u.Sources)
+		sort.Strings(u.Orgs)
+		out = append(out, u)
 	}
 
 	sort.Slice(out, func(a, b int) bool {

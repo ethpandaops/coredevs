@@ -38,11 +38,11 @@ can always be queried ad-hoc via `/api/v1/orgs/{org}/members` without wiring.
 
 ## API
 
-Teams span several `kind`s — `client` (the 11 EL/CL clients), `research`,
-`coordination` (EL/CL spec coordination), `delivery` (testing, devnets,
-security, …), and `ops` (the ethPandaOps team) — mirroring the Protocol Guild
-working groups plus a few non-PG teams. Filter with `/api/v1/teams?kind=client`
-to get just the client teams.
+Teams span four `kind`s — `client` (the 11 EL/CL clients), `research`,
+`coordination` (EL/CL spec coordination), and `delivery` (testing, devnets,
+security, and the ethPandaOps team) — mirroring the Protocol Guild working
+groups plus a few non-PG teams. Filter with `/api/v1/teams?kind=client` to get
+just the client teams.
 
 | Method & path | Description |
 | --- | --- |

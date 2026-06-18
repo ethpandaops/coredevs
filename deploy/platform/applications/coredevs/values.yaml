@@ -73,18 +73,18 @@ tolerations: []
 # The canonical team registry served by the API. This is the deploy-time source
 # of truth (editable here without rebuilding the image). Mirrors the repo's
 # config.yaml team mapping. See that file for the org-wiring caveats. `kind` is
-# one of client | research | coordination | delivery | ops.
+# one of client | research | coordination | delivery.
 teams:
   # Consensus clients
-  grandine: { displayName: Grandine, kind: client, layer: cl, protocolGuildSections: [Grandine], githubOrgs: [grandinetech] }
-  lighthouse: { displayName: Lighthouse, kind: client, layer: cl, protocolGuildSections: [Lighthouse], githubOrgs: [sigp] }
-  lodestar: { displayName: Lodestar, kind: client, layer: cl, protocolGuildSections: [Lodestar], githubOrgs: [ChainSafe] }
+  grandine: { displayName: Grandine, kind: client, layer: cl, protocolGuildSections: [Grandine], githubOrgs: [] }
+  lighthouse: { displayName: Lighthouse, kind: client, layer: cl, protocolGuildSections: [Lighthouse], githubOrgs: [] }
+  lodestar: { displayName: Lodestar, kind: client, layer: cl, protocolGuildSections: [Lodestar], githubOrgs: [] }
   nimbus: { displayName: Nimbus, kind: client, layer: cl, protocolGuildSections: [Nimbus], githubOrgs: [] }
   prysm: { displayName: Prysm, kind: client, layer: cl, protocolGuildSections: [Prysm], githubOrgs: [] }
   teku: { displayName: Teku, kind: client, layer: cl, protocolGuildSections: [Teku], githubOrgs: [] }
   # Execution clients
   besu: { displayName: Besu, kind: client, layer: el, protocolGuildSections: [Hyperledger Besu, Besu], githubOrgs: [] }
-  erigon: { displayName: Erigon, kind: client, layer: el, protocolGuildSections: [Erigon], githubOrgs: [erigontech] }
+  erigon: { displayName: Erigon, kind: client, layer: el, protocolGuildSections: [Erigon], githubOrgs: [] }
   geth: { displayName: Geth, kind: client, layer: el, protocolGuildSections: [Geth], githubOrgs: [] } # `ethereum` org is the EF umbrella, not geth
   nethermind: { displayName: Nethermind, kind: client, layer: el, protocolGuildSections: [Nethermind], githubOrgs: [] }
   reth: { displayName: Reth, kind: client, layer: el, protocolGuildSections: [Reth], githubOrgs: [] }
@@ -107,4 +107,4 @@ teams:
   security: { displayName: Security, kind: delivery, protocolGuildSections: [Security] }
   pg-operations: { displayName: Funding + PG Operations, kind: delivery, protocolGuildSections: [Funding + PG Operations] }
   # ethPandaOps (not in Protocol Guild; sourced from the org)
-  ethpandaops: { displayName: ethPandaOps, kind: ops, githubOrgs: [ethpandaops] }
+  ethpandaops: { displayName: ethPandaOps, kind: delivery, githubOrgs: [ethpandaops] }

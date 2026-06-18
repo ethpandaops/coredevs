@@ -185,9 +185,9 @@ func (c *Config) validate() error {
 		}
 
 		switch team.Kind {
-		case "", "client", "research", "coordination", "delivery", "ops":
+		case "", "client", "research", "coordination", "delivery":
 		default:
-			return fmt.Errorf("team %q: kind must be one of client, research, coordination, delivery, ops, or empty, got %q", slug, team.Kind)
+			return fmt.Errorf("team %q: kind must be one of client, research, coordination, delivery, or empty, got %q", slug, team.Kind)
 		}
 	}
 
