@@ -1,0 +1,83 @@
+nameOverride: ""
+fullnameOverride: coredevs
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/ethpandaops/coredevs
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# Keel auto-pulls a freshly pushed :latest. Disabled in staging.
+keel:
+  enabled: true
+  pollSchedule: "@every 5m"
+
+# Public ingress for the read-only API.
+# Convention: <app>.analytics.<env>.platform.ethpandaops.io
+ingress:
+  enabled: true
+  className: ingress-nginx-public
+  host: coredevs.analytics.staging.platform.ethpandaops.io
+  annotations:
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+
+# Small PVC holding the last-good index snapshot (no database).
+storage:
+  size: 1Gi
+  storageClass: local-path
+
+# How often datasources are refreshed.
+syncInterval: 3h
+
+github:
+  # The synced github-org source only calls GitHub for orgs explicitly wired
+  # into a team (none by default), so a token is optional. It is used to lift
+  # the rate limit on the on-demand /api/v1/orgs/{org}/members endpoint.
+  # Enable to inject a token from SOPS via the AVP placeholder below.
+  tokenEnabled: false
+  token: <path:/secrets/clusters/primary/environment/primary.enc.yaml#coredevs | jsonPath {.github_token}>
+
+serviceMonitor:
+  enabled: true
+  scrapeInterval: 30s
+
+resources:
+  requests:
+    cpu: 25m
+    memory: 64Mi
+  limits:
+    cpu: 250m
+    memory: 192Mi
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+nodeSelector: {}
+tolerations: []
+
+# The canonical team registry served by the API. This is the deploy-time source
+# of truth (editable here without rebuilding the image). Mirrors the repo's
+# config.yaml team mapping. See that file for the org-wiring caveats.
+teams:
+  grandine: { displayName: Grandine, layer: cl, protocolGuildSections: [Grandine], githubOrgs: [] }
+  lighthouse: { displayName: Lighthouse, layer: cl, protocolGuildSections: [Lighthouse], githubOrgs: [] }
+  lodestar: { displayName: Lodestar, layer: cl, protocolGuildSections: [Lodestar], githubOrgs: [] }
+  nimbus: { displayName: Nimbus, layer: cl, protocolGuildSections: [Nimbus], githubOrgs: [] }
+  prysm: { displayName: Prysm, layer: cl, protocolGuildSections: [Prysm], githubOrgs: [] }
+  teku: { displayName: Teku, layer: cl, protocolGuildSections: [Teku], githubOrgs: [] }
+  besu: { displayName: Besu, layer: el, protocolGuildSections: [Hyperledger Besu, Besu], githubOrgs: [] }
+  erigon: { displayName: Erigon, layer: el, protocolGuildSections: [Erigon], githubOrgs: [] }
+  geth: { displayName: Geth, layer: el, protocolGuildSections: [Geth], githubOrgs: [] }
+  nethermind: { displayName: Nethermind, layer: el, protocolGuildSections: [Nethermind], githubOrgs: [] }
+  reth: { displayName: Reth, layer: el, protocolGuildSections: [Reth], githubOrgs: [] }

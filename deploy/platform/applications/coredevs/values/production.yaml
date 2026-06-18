@@ -1,0 +1,8 @@
+replicaCount: 1
+
+keel:
+  enabled: true
+
+ingress:
+  enabled: true
+  host: coredevs.analytics.production.platform.ethpandaops.io

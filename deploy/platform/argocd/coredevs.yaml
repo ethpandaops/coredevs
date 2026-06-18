@@ -1,0 +1,51 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: {{ include "mca-deployer2.fullname" . }}-coredevs
+  labels:
+    {{- include "mca-deployer2.labels" . | nindent 4 }}
+spec:
+  generators:
+    - clusters:
+        selector:
+          matchExpressions:
+          - key: ethpandaops.io/cluster_name
+            operator: In
+            values:
+            - analytics
+          - key: ethpandaops.io/realm
+            operator: In
+            values:
+            - platform
+          - key: ethpandaops.io/environment
+            operator: In
+            values:
+            - {{ .Values.ethpandaops.environment }}
+  template:
+    metadata:
+      name: |-
+        {{`{{name}}-coredevs`}}
+      annotations:
+        argocd.argoproj.io/manifest-generate-paths: ".;/environments/{{ $.Values.ethpandaops.environment }}/secrets;/environments/{{ $.Values.ethpandaops.environment }}/clusters/primary/secrets;/environments/{{ $.Values.ethpandaops.environment }}/clusters/cip/secrets"
+    spec:
+      project: default
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+      source:
+        repoURL: https://github.com/ethpandaops/platform.git
+        targetRevision: HEAD
+        path: "environments/{{ .Values.ethpandaops.environment }}/applications/coredevs"
+        plugin:
+          name: argocd-vault-plugin-helm-kustomize
+          env:
+            - name: HELM_OPTIONAL_VALUES_FILES
+              value: |-
+                {{`values.yaml,values/{{name}}.yaml,values/{{metadata.labels.environment}}.yaml,values/{{metadata.labels.environment}}-{{name}}.yaml`}}
+      destination:
+        name: |-
+          {{`{{name}}`}}
+        namespace: coredevs

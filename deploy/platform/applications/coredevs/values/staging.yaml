@@ -1,0 +1,9 @@
+# Staging starts disabled; flip replicaCount to 1 to smoke-test in staging.
+replicaCount: 0
+
+keel:
+  enabled: false
+
+ingress:
+  enabled: false
+  host: coredevs.analytics.staging.platform.ethpandaops.io

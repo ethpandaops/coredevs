@@ -59,25 +59,25 @@ func New(logger *slog.Logger, store *index.Store, sources []source.Source, inter
 	}
 }
 
-// Start performs an initial synchronous sync, then refreshes on the interval in
-// a background goroutine until Stop is called or ctx is cancelled.
+// Start seeds the index from the on-disk snapshot for immediate availability,
+// performs an initial synchronous sync, then refreshes on the interval in a
+// background goroutine until Stop is called or ctx is cancelled.
 //
-// If the first sync yields no data but a snapshot exists on disk, the snapshot
-// is published so the service can serve last-good data immediately.
+// The snapshot is loaded first so the service serves last-good data even if the
+// initial sync degrades; the publish guard in Sync ensures a fresh sync only
+// replaces the snapshot when it actually has data.
 func (s *Syncer) Start(ctx context.Context) error {
-	s.Sync(ctx)
-
-	if s.store.Get() == nil {
-		if snap, err := index.LoadSnapshot(s.snapshot); err != nil {
-			s.logger.WarnContext(ctx, "failed to load snapshot", slog.Any("error", err))
-		} else if snap != nil {
-			s.logger.InfoContext(ctx, "serving index from snapshot",
-				slog.Time("generatedAt", snap.GeneratedAt),
-				slog.Int("teams", len(snap.Teams)),
-			)
-			s.store.Set(snap)
-		}
+	if snap, err := index.LoadSnapshot(s.snapshot); err != nil {
+		s.logger.WarnContext(ctx, "failed to load snapshot", slog.Any("error", err))
+	} else if snap != nil {
+		s.logger.InfoContext(ctx, "serving index from snapshot",
+			slog.Time("generatedAt", snap.GeneratedAt),
+			slog.Int("teams", len(snap.Teams)),
+		)
+		s.store.Set(snap)
 	}
+
+	s.Sync(ctx)
 
 	s.wg.Add(1)
 	go s.loop(ctx)
