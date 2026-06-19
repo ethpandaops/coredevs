@@ -1,5 +1,5 @@
 apiVersion: apps/v1
-kind: StatefulSet
+kind: Deployment
 metadata:
   name: {{ include "coredevs.fullname" . }}
   labels:
@@ -13,7 +13,10 @@ metadata:
   {{- end }}
 spec:
   replicas: {{ .Values.replicaCount }}
-  serviceName: {{ include "coredevs.fullname" . }}
+  # The snapshot PVC is ReadWriteOnce and there is a single replica, so the old
+  # pod must release the volume before the new one mounts it.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       {{- include "coredevs.selectorLabels" . | nindent 6 }}
@@ -32,6 +35,10 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "coredevs.fullname" . }}-data
       containers:
         - name: coredevs
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -71,15 +78,3 @@ spec:
             periodSeconds: 20
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-  volumeClaimTemplates:
-    - metadata:
-        name: data
-      spec:
-        accessModes:
-          - ReadWriteOnce
-        resources:
-          requests:
-            storage: {{ .Values.storage.size }}
-        {{- with .Values.storage.storageClass }}
-        storageClassName: {{ . | quote }}
-        {{- end }}
