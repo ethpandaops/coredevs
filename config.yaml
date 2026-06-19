@@ -42,6 +42,11 @@ sources:
 # Candidate orgs per team are noted in comments for when you choose to opt in.
 # kind groups teams by role so consumers can filter (e.g. /api/v1/teams?kind=client):
 #   client | research | coordination | delivery
+# GitHub handles dropped from every team regardless of source — for stale handles
+# an upstream still lists (renamed/deleted accounts whose key fetches 404).
+exclude:
+  - somnathb1 # renamed/deleted; the dev is now somnergy (added to erigon members)
+
 teams:
   # --- Consensus clients ---
   grandine:
@@ -101,7 +106,8 @@ teams:
     layer: el
     protocolGuildSections: [Erigon]
     githubOrgs: [] # candidate: erigontech
-    members: [] # Add manual github users here
+    members:
+      - somnergy # Protocol Guild lists the stale handle somnathb1 (see exclude)
   geth:
     displayName: Geth
     kind: client

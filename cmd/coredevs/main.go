@@ -71,7 +71,7 @@ func run(ctx context.Context, configPath string) error {
 	}
 
 	store := index.NewStore()
-	sync := syncer.New(logger, store, sources, cfg.SyncInterval, cfg.SnapshotPath, floors)
+	sync := syncer.New(logger, store, sources, cfg.SyncInterval, cfg.SnapshotPath, floors, cfg.ExcludedHandles())
 
 	if err := sync.Start(ctx); err != nil {
 		logger.ErrorContext(ctx, "failed to start syncer", slog.Any("error", err))

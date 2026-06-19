@@ -5,6 +5,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -23,6 +24,10 @@ type Config struct {
 	Sources Sources `yaml:"sources"`
 	// Teams is the canonical team registry keyed by team slug.
 	Teams map[string]Team `yaml:"teams"`
+	// Exclude lists GitHub handles to drop from every team, regardless of source.
+	// Used to suppress stale handles an upstream still lists — e.g. a renamed or
+	// deleted GitHub account whose key fetches would otherwise 404 for consumers.
+	Exclude []string `yaml:"exclude"`
 }
 
 // HTTP configures the API server.
@@ -148,6 +153,21 @@ func (c *Config) ManualMembers() map[string][]string {
 		if len(team.Members) > 0 {
 			out[slug] = team.Members
 		}
+	}
+
+	return out
+}
+
+// ExcludedHandles returns the configured Exclude list as a set of lowercased
+// handles, or nil if none are configured.
+func (c *Config) ExcludedHandles() map[string]bool {
+	if len(c.Exclude) == 0 {
+		return nil
+	}
+
+	out := make(map[string]bool, len(c.Exclude))
+	for _, h := range c.Exclude {
+		out[strings.ToLower(h)] = true
 	}
 
 	return out

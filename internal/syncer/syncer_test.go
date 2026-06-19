@@ -39,7 +39,7 @@ func newTestSyncer(t *testing.T, src source.Source, snapshot string) (*Syncer, *
 	t.Helper()
 	store := index.NewStore()
 
-	return New(slog.Default(), store, []source.Source{src}, time.Hour, snapshot, nil), store
+	return New(slog.Default(), store, []source.Source{src}, time.Hour, snapshot, nil, nil), store
 }
 
 func TestStartSeedsFromSnapshotWhenSyncDegrades(t *testing.T) {
@@ -88,7 +88,7 @@ func TestMemberFloorRejectsDegradedFetch(t *testing.T) {
 	}
 	store := index.NewStore()
 	s := New(slog.Default(), store, []source.Source{src}, time.Hour, "",
-		map[string]int{source.NameProtocolGuild: 3})
+		map[string]int{source.NameProtocolGuild: 3}, nil)
 
 	require.NoError(t, s.Start(context.Background()))
 	t.Cleanup(func() { _ = s.Stop() })
@@ -107,6 +107,27 @@ func TestMemberFloorRejectsDegradedFetch(t *testing.T) {
 	}
 	s.Sync(context.Background())
 	assert.Len(t, store.Get().Members("teku", ""), 3)
+}
+
+func TestExcludeDropsStaleHandle(t *testing.T) {
+	src := &fakeSource{
+		name: source.NameProtocolGuild,
+		members: []source.Membership{
+			{Handle: "somnathb1", Team: "erigon", Source: source.NameProtocolGuild},
+			{Handle: "yperbasis", Team: "erigon", Source: source.NameProtocolGuild},
+		},
+	}
+	store := index.NewStore()
+	// Exclude is matched case-insensitively against a lowercased set.
+	s := New(slog.Default(), store, []source.Source{src}, time.Hour, "", nil,
+		map[string]bool{"somnathb1": true})
+
+	require.NoError(t, s.Start(context.Background()))
+	t.Cleanup(func() { _ = s.Stop() })
+
+	got := store.Get().Members("erigon", "")
+	require.Len(t, got, 1)
+	assert.Equal(t, "yperbasis", got[0].Handle)
 }
 
 func TestSyncKeepsLastGoodOnLaterFailure(t *testing.T) {

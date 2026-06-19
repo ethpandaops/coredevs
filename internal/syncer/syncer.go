@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,6 +24,7 @@ type Syncer struct {
 	interval time.Duration
 	snapshot string
 	floors   map[string]int
+	exclude  map[string]bool
 
 	mu       sync.Mutex
 	lastGood map[string][]source.Membership
@@ -49,8 +51,10 @@ type SourceStatus struct {
 // New constructs a Syncer. snapshot is an optional path for last-good
 // persistence; an empty string disables it. floors maps a source name to a
 // minimum membership count below which a fetch is treated as a soft failure; a
-// missing or zero entry disables the floor for that source.
-func New(logger *slog.Logger, store *index.Store, sources []source.Source, interval time.Duration, snapshot string, floors map[string]int) *Syncer {
+// missing or zero entry disables the floor for that source. exclude is a set of
+// lowercased handles dropped from every team before indexing — used to suppress
+// stale handles an upstream source still lists (e.g. a renamed GitHub account).
+func New(logger *slog.Logger, store *index.Store, sources []source.Source, interval time.Duration, snapshot string, floors map[string]int, exclude map[string]bool) *Syncer {
 	return &Syncer{
 		logger:   logger.With(slog.String("component", "syncer")),
 		store:    store,
@@ -58,6 +62,7 @@ func New(logger *slog.Logger, store *index.Store, sources []source.Source, inter
 		interval: interval,
 		snapshot: snapshot,
 		floors:   floors,
+		exclude:  exclude,
 		lastGood: make(map[string][]source.Membership, len(sources)),
 		status:   make(map[string]*SourceStatus, len(sources)),
 		done:     make(chan struct{}),
@@ -137,6 +142,17 @@ func (s *Syncer) Sync(ctx context.Context) *index.Index {
 	}
 
 	wg.Wait()
+
+	if len(s.exclude) > 0 {
+		kept := all[:0]
+		for _, m := range all {
+			if s.exclude[strings.ToLower(m.Handle)] {
+				continue
+			}
+			kept = append(kept, m)
+		}
+		all = kept
+	}
 
 	idx := index.Build(time.Now().UTC(), all)
 
