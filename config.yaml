@@ -220,5 +220,14 @@ teams:
   ethpandaops:
     displayName: ethPandaOps
     kind: delivery
-    githubOrgs: [ethpandaops]
-    members: [] # Add manual github users here
+    # Curated list rather than the org's public members: it includes private
+    # org members and excludes non-devops accounts.
+    githubOrgs: []
+    members:
+      - barnabasbusa
+      - parithosh
+      - samcm
+      - savid
+      - skylenet
+      - pk910
+      - qu0b
