@@ -72,8 +72,8 @@ h2{font-size:12px;font-family:var(--mono);text-transform:uppercase;letter-spacin
 .mem:hover .h{text-decoration:underline;text-underline-offset:2px}
 .mem .av{width:20px;height:20px;border-radius:50%;flex:0 0 auto;background:var(--line);object-fit:cover}
 .mem .h{font-family:var(--mono);font-size:13px}
-.mem .pv{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--faint);white-space:nowrap}
-.mem .pv .pg{color:#0a7}.mem .pv .og{color:var(--acc)}.mem .pv .mn{color:#a50}
+.mem .pv{margin-left:auto;display:inline-flex;gap:5px;white-space:nowrap}
+.mem .pv span{font-family:var(--mono);font-size:9.5px;line-height:1;letter-spacing:.03em;color:var(--mut);background:var(--code);border:1px solid var(--line);border-radius:4px;padding:3px 5px}
 
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--line2);font-family:var(--mono);font-size:12px;color:var(--faint);display:flex;gap:20px;flex-wrap:wrap}
 footer a:hover{color:var(--ink)}
@@ -150,7 +150,7 @@ async function renderHome(){
     const sum=rows.reduce((a,t)=>a+t.count,0);
     h+=`<div class="kind"><div class="kh"><h3>${esc(klabel(k))}</h3><span class="c">${rows.length} teams · ${sum}</span></div>`;
     for(const t of rows){const c=t.counts||{};
-      const br=[["pg","protocol-guild"],["org","github-org"],["man","manual"]]
+      const br=[["pg","protocol-guild"],["org","github-org"],["m","manual"]]
         .filter(([,s])=>s!=="manual"||c[s]).map(([l,s])=>`${l} ${c[s]?c[s]:'<span class="z">0</span>'}`).join("  ");
       h+=`<a class="row" data-link href="/team/${encodeURIComponent(t.slug)}">`
         +`<span><span class="nm">${esc(t.displayName||t.slug)}</span><span class="sg">${esc(t.slug)}</span></span>`
@@ -197,7 +197,7 @@ async function renderTeam(slug){
 
   h+=`<h2>Roster</h2><div class="members">`;
   for(const m of members){
-    const pv=(m.sources||[]).map(s=>s==="protocol-guild"?'<span class="pg">pg</span>':s==="github-org"?'<span class="og">org</span>':'<span class="mn">man</span>').join(" ");
+    const pv=(m.sources||[]).map(s=>s==="protocol-guild"?'<span class="pg">pg</span>':s==="github-org"?'<span class="og">org</span>':'<span class="mn">m</span>').join(" ");
     const hh=encodeURIComponent(m.handle);
     h+=`<a class="mem" href="https://github.com/${hh}" target="_blank" rel="noopener">`
       +`<img class="av" src="https://github.com/${hh}.png?size=48" alt="" loading="lazy" onerror="this.style.visibility='hidden'">`
