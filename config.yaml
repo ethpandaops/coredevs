@@ -57,28 +57,28 @@ teams:
     layer: cl
     protocolGuildSections: [Lighthouse]
     githubOrgs: [] # candidate: sigp (Sigma Prime — over-includes the security arm)
-    members: [] # Add manual github users here
+    members: [AgeManning, paulhauner] # from glamsterdam-devnets (not in Protocol Guild)
   lodestar:
     displayName: Lodestar
     kind: client
     layer: cl
     protocolGuildSections: [Lodestar]
     githubOrgs: [] # candidate: ChainSafe (multi-product company org)
-    members: [] # Add manual github users here
+    members: [g11tech, philknows] # from glamsterdam-devnets (not in Protocol Guild)
   nimbus:
     displayName: Nimbus
     kind: client
     layer: cl
     protocolGuildSections: [Nimbus]
     githubOrgs: [] # candidate: status-im (multi-product company org)
-    members: [] # Add manual github users here
+    members: [Tomi-3-0, ahshum, chirag-parmar, zah] # from glamsterdam-devnets (not in Protocol Guild)
   prysm:
     displayName: Prysm
     kind: client
     layer: cl
     protocolGuildSections: [Prysm]
     githubOrgs: [] # candidate: OffchainLabs (also Arbitrum — broad)
-    members: [] # Add manual github users here
+    members: [nisdas, rkapka] # from glamsterdam-devnets (not in Protocol Guild)
   teku:
     displayName: Teku
     kind: client
@@ -94,7 +94,7 @@ teams:
     layer: el
     protocolGuildSections: [Hyperledger Besu, Besu]
     githubOrgs: [] # candidate: hyperledger (multi-project foundation org)
-    members: [] # Add manual github users here
+    members: [joshuafernandes] # from glamsterdam-devnets (not in Protocol Guild)
   erigon:
     displayName: Erigon
     kind: client
@@ -123,7 +123,7 @@ teams:
     layer: el
     protocolGuildSections: [Reth]
     githubOrgs: [] # candidate: paradigmxyz (multi-project org)
-    members: [] # Add manual github users here
+    members: [emmajam, gakonst, jenpaff, onbjerg, rkrasiuk] # from glamsterdam-devnets (not in Protocol Guild)
   ethrex:
     displayName: ethrex
     kind: client
