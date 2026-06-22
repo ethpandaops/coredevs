@@ -43,7 +43,7 @@ keys:
   # Target staleness: a full pass completes about once per this window, so a key
   # change shows up within it. Lower for fresher keys; the RPS ceiling below
   # still protects GitHub.
-  refreshInterval: 3h
+  refreshInterval: 1h
   # Hard ceiling on the upstream request rate.
   maxRequestsPerSecond: 5
   # Last-good key cache persisted here between restarts. Mounted from a PVC in k8s.
