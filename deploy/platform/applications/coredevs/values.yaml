@@ -1,7 +1,23 @@
 nameOverride: ""
 fullnameOverride: coredevs
 
-replicaCount: 1
+# Baseline reader replicas when autoscaling is disabled. Readers are stateless
+# (they serve the snapshot loaded from Postgres), so they scale freely and run
+# RollingUpdate(maxUnavailable=0) for zero-downtime deploys.
+replicaCount: 3
+
+# CPU-based autoscaling of the reader pool for traffic bursts. Serving is in
+# memory and cheap, so this rarely engages, but it absorbs spikes past 500 rps.
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+# Keep a quorum of readers serving through node drains/upgrades.
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
 
 image:
   repository: ghcr.io/ethpandaops/coredevs
@@ -9,13 +25,13 @@ image:
   # Always so each rollout pulls the current :latest digest.
   pullPolicy: Always
 
-# Keel polls ghcr and force-updates the pod when :latest changes — the auto-pull
+# Keel polls ghcr and force-updates the pods when :latest changes — the auto-pull
 # path (ArgoCD syncs git, not the registry). Short poll = low push→live latency.
 keel:
   enabled: true
   pollSchedule: "@every 3m"
 
-# Public ingress for the read-only API.
+# Public ingress for the read-only API (points at the reader Service).
 # Convention: <app>.analytics.<env>.platform.ethpandaops.io
 ingress:
   enabled: true
@@ -24,10 +40,32 @@ ingress:
   annotations:
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
 
-# Small PVC holding the last-good index snapshot (no database).
+# Shared Postgres holding the single canonical snapshot row. The writer publishes
+# it; every reader loads it, so all pods serve identical data.
+postgres:
+  # Provision a bundled single-instance Postgres in this chart. Set false to use
+  # an external/managed Postgres instead (then point the DSN secret at it).
+  provision: true
+  image: postgres:16-alpine
+  user: coredevs
+  database: coredevs
+  # Password resolved from SOPS via the ArgoCD Vault Plugin, like the GitHub token.
+  password: <path:/secrets/clusters/primary/environment/primary.enc.yaml#coredevs | jsonPath {.db_password}>
+  storage:
+    size: 2Gi
+    storageClass: local-path
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# Size limit for the writer's per-pod emptyDir key cache (no PVC — the writer
+# re-warms from GitHub on start; readers need no volume at all).
 storage:
-  size: 1Gi
-  storageClass: local-path
+  size: 256Mi
 
 github:
   # The synced github-org source only calls GitHub for orgs explicitly wired
@@ -41,13 +79,16 @@ serviceMonitor:
   enabled: true
   scrapeInterval: 30s
 
+# Applies to the reader and writer pods.
 resources:
   requests:
-    cpu: 25m
-    memory: 64Mi
+    cpu: 50m
+    memory: 96Mi
   limits:
-    cpu: 250m
-    memory: 192Mi
+    # Headroom for bursts; load testing showed <100m even at 1000 rps, but a
+    # higher ceiling lets a single pod soak a spike without CFS throttling.
+    cpu: "1"
+    memory: 256Mi
 
 podSecurityContext:
   runAsNonRoot: true
