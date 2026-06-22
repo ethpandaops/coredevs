@@ -1,9 +1,18 @@
-# Staging starts disabled; flip replicaCount to 1 to smoke-test in staging.
-replicaCount: 0
+# Staging runs a fixed 2-reader set (autoscaling off) so the multi-pod rolling
+# update and writer→Postgres→reader consistency can be smoke-tested before
+# promotion. Set replicaCount: 0 to turn the app off (Postgres stays).
+replicaCount: 2
+
+autoscaling:
+  enabled: false
+
+podDisruptionBudget:
+  # Must be < replicaCount or rollouts/evictions block.
+  minAvailable: 1
 
 keel:
   enabled: false
 
 ingress:
-  enabled: false
+  enabled: true
   host: coredevs.analytics.staging.platform.ethpandaops.io

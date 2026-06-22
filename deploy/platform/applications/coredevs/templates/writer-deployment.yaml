@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "coredevs.fullname" . }}-writer
+  labels:
+    {{- include "coredevs.labels" . | nindent 4 }}
+    app.kubernetes.io/component: writer
+  {{- if .Values.keel.enabled }}
+  annotations:
+    keel.sh/policy: force
+    keel.sh/trigger: poll
+    keel.sh/match-tag: "true"
+    keel.sh/pollSchedule: {{ .Values.keel.pollSchedule | quote }}
+  {{- end }}
+spec:
+  # Exactly one writer: it is the single source of truth that publishes the
+  # snapshot. Recreate (never two at once) keeps GitHub fetching to 1x and avoids
+  # racing writers. Its brief downtime during a deploy does not affect serving —
+  # readers keep serving the last published snapshot from Postgres.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "coredevs.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: writer
+  template:
+    metadata:
+      labels:
+        {{- include "coredevs.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: writer
+    spec:
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        # Per-pod warm cache for the key files (only the writer fetches keys).
+        - name: data
+          emptyDir:
+            sizeLimit: {{ .Values.storage.size }}
+      containers:
+        - name: coredevs
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          args:
+            - --config=/app/config.yaml
+            - --role=writer
+          env:
+            {{- include "coredevs.dbEnv" . | nindent 12 }}
+            {{- if .Values.github.tokenEnabled }}
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "coredevs.fullname" . }}-github
+                  key: token
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

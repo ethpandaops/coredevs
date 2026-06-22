@@ -6,8 +6,10 @@ metadata:
     {{- include "coredevs.labels" . | nindent 4 }}
 spec:
   type: ClusterIP
+  # Public traffic goes only to reader pods; the writer serves no user traffic.
   selector:
     {{- include "coredevs.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: reader
   ports:
     - name: http
       port: 8080

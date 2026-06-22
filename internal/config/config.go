@@ -24,6 +24,8 @@ type Config struct {
 	Sources Sources `yaml:"sources"`
 	// Keys configures the GitHub SSH public-key cache.
 	Keys Keys `yaml:"keys"`
+	// Cluster configures multi-pod operation via a shared Postgres snapshot.
+	Cluster Cluster `yaml:"cluster"`
 	// Teams is the canonical team registry keyed by team slug.
 	Teams map[string]Team `yaml:"teams"`
 	// Exclude lists GitHub handles to drop from every team, regardless of source.
@@ -93,6 +95,55 @@ type Keys struct {
 	// developer's keys as soon as they are fetched so partial progress survives a
 	// restart. Empty disables persistence.
 	CacheDir string `yaml:"cacheDir"`
+	// WarmTimeout bounds how long a fresh pod withholds readiness while its key
+	// cache warms, so a slow GitHub cannot keep a pod from ever becoming ready.
+	// Zero uses a sensible default.
+	WarmTimeout time.Duration `yaml:"warmTimeout"`
+}
+
+// Cluster roles.
+const (
+	// RoleStandalone is a single self-contained pod: it syncs, fetches keys and
+	// serves from its own memory. The default; no Postgres required.
+	RoleStandalone = "standalone"
+	// RoleWriter is the single pod that syncs, fetches keys and publishes the
+	// canonical snapshot to Postgres. It does not receive user traffic.
+	RoleWriter = "writer"
+	// RoleReader is a stateless serving pod: it loads the published snapshot from
+	// Postgres and serves it. Many readers run behind the public Service.
+	RoleReader = "reader"
+)
+
+// Cluster configures multi-pod operation. With a single writer publishing one
+// snapshot row to Postgres and many readers loading it, every pod serves
+// identical data — there is no per-pod drift (split brain).
+type Cluster struct {
+	// Role is one of standalone, writer or reader.
+	Role string `yaml:"role"`
+	// Postgres configures the shared snapshot store (required for writer/reader).
+	Postgres Postgres `yaml:"postgres"`
+}
+
+// Postgres configures the shared snapshot store.
+type Postgres struct {
+	// DSNEnv is the environment variable holding the Postgres connection string.
+	DSNEnv string `yaml:"dsnEnv"`
+	// PublishInterval is how often the writer publishes a fresh snapshot.
+	PublishInterval time.Duration `yaml:"publishInterval"`
+	// RefreshInterval is how often a reader polls Postgres for a new snapshot.
+	// Smaller values reduce cross-pod skew; the data changes slowly so seconds
+	// are plenty.
+	RefreshInterval time.Duration `yaml:"refreshInterval"`
+}
+
+// DSN resolves the Postgres connection string from the configured environment
+// variable, or "" if unset.
+func (c Cluster) DSN() string {
+	if c.Postgres.DSNEnv == "" {
+		return ""
+	}
+
+	return os.Getenv(c.Postgres.DSNEnv)
 }
 
 // Team describes a canonical team and how it maps onto upstream sources.
@@ -159,6 +210,14 @@ func Default() *Config {
 			RefreshInterval:      3 * time.Hour,
 			MaxRequestsPerSecond: 5,
 		},
+		Cluster: Cluster{
+			Role: RoleStandalone,
+			Postgres: Postgres{
+				DSNEnv:          "COREDEVS_DATABASE_URL",
+				PublishInterval: 15 * time.Second,
+				RefreshInterval: 5 * time.Second,
+			},
+		},
 		Teams: make(map[string]Team, 0),
 	}
 }
@@ -217,6 +276,12 @@ func (c *Config) SectionTeams() map[string]string {
 	return out
 }
 
+// Validate checks the configuration for consistency. It is exported so callers
+// that mutate config after Load (e.g. a --role flag override) can re-check it.
+func (c *Config) Validate() error {
+	return c.validate()
+}
+
 func (c *Config) validate() error {
 	if c.SyncInterval <= 0 {
 		return fmt.Errorf("syncInterval must be positive, got %s", c.SyncInterval)
@@ -228,6 +293,19 @@ func (c *Config) validate() error {
 
 	if len(c.Teams) == 0 {
 		return fmt.Errorf("at least one team must be configured")
+	}
+
+	switch c.Cluster.Role {
+	case RoleStandalone:
+	case RoleWriter, RoleReader:
+		if c.Cluster.Postgres.RefreshInterval <= 0 {
+			return fmt.Errorf("cluster.postgres.refreshInterval must be positive, got %s", c.Cluster.Postgres.RefreshInterval)
+		}
+		if c.Cluster.Postgres.PublishInterval <= 0 {
+			return fmt.Errorf("cluster.postgres.publishInterval must be positive, got %s", c.Cluster.Postgres.PublishInterval)
+		}
+	default:
+		return fmt.Errorf("cluster.role must be one of standalone, writer, reader, got %q", c.Cluster.Role)
 	}
 
 	if c.Keys.Enabled {

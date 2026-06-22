@@ -1,5 +1,4 @@
-replicaCount: 1
-
+# Reader replicas + autoscaling come from base values.yaml (3 baseline, HPA→10).
 keel:
   enabled: true
 

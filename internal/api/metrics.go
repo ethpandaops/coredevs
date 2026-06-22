@@ -4,15 +4,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/ethpandaops/coredevs/internal/index"
-	"github.com/ethpandaops/coredevs/internal/syncer"
 )
 
 // collector exposes coredevs state as Prometheus metrics, read at scrape time
 // so the sync path stays free of metric bookkeeping.
 type collector struct {
-	store  *index.Store
-	syncer *syncer.Syncer
-	keys   KeyProvider
+	store    *index.Store
+	statuses StatusFunc
+	keys     KeyProvider
 
 	teamMembers    *prometheus.Desc
 	indexGenerated *prometheus.Desc
@@ -26,11 +25,11 @@ type collector struct {
 
 var _ prometheus.Collector = (*collector)(nil)
 
-func newCollector(store *index.Store, sync *syncer.Syncer, keyProvider KeyProvider) *collector {
+func newCollector(store *index.Store, statuses StatusFunc, keyProvider KeyProvider) *collector {
 	return &collector{
-		store:  store,
-		syncer: sync,
-		keys:   keyProvider,
+		store:    store,
+		statuses: statuses,
+		keys:     keyProvider,
 		teamMembers: prometheus.NewDesc(
 			"coredevs_team_members",
 			"Number of members in a team, by source.",
@@ -102,7 +101,7 @@ func (c *collector) Collect(ch chan<- prometheus.Metric) {
 		}
 	}
 
-	for _, st := range c.syncer.Statuses() {
+	for _, st := range c.statuses() {
 		ch <- prometheus.MustNewConstMetric(
 			c.sourceMembers, prometheus.GaugeValue, float64(st.Members), st.Name,
 		)

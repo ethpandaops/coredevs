@@ -27,3 +27,15 @@ helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | 
 app.kubernetes.io/name: {{ include "coredevs.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
+
+{{/* DB connection env shared by the writer and reader pods. The DSN is composed
+from the password secret so only the password lives in SOPS. */}}
+{{- define "coredevs.dbEnv" -}}
+- name: COREDEVS_DB_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "coredevs.fullname" . }}-db
+      key: password
+- name: COREDEVS_DATABASE_URL
+  value: "postgres://{{ .Values.postgres.user }}:$(COREDEVS_DB_PASSWORD)@{{ include "coredevs.fullname" . }}-postgres:5432/{{ .Values.postgres.database }}?sslmode=disable"
+{{- end -}}

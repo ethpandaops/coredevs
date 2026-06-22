@@ -46,10 +46,26 @@ keys:
   refreshInterval: 1h
   # Hard ceiling on the upstream request rate.
   maxRequestsPerSecond: 5
-  # Per-handle key cache directory (one file per developer), on the PVC. Each
-  # handle is written as soon as it is fetched, so a restart keeps everything
-  # fetched so far. Empty disables persistence.
+  # Per-handle key cache directory (one file per developer). Used only by the
+  # writer (readers serve from Postgres); empty disables persistence.
   cacheDir: /data/keys
+
+# Multi-pod coordination. coredevs holds no authoritative state, so to serve
+# from many pods without split brain a single writer publishes one snapshot row
+# to Postgres and many readers load it — every pod serves identical data.
+#
+# role is set per pod by the --role flag (the writer/reader Deployments pass it),
+# since the config is baked into one image. Default standalone needs no Postgres.
+cluster:
+  role: standalone # overridden to writer/reader in k8s
+  postgres:
+    # Env var holding the Postgres connection string (injected from a secret).
+    dsnEnv: COREDEVS_DATABASE_URL
+    # How often the writer publishes a fresh snapshot.
+    publishInterval: 15s
+    # How often a reader polls Postgres for a new snapshot. Bounds cross-pod skew;
+    # the data changes slowly so a few seconds is plenty.
+    refreshInterval: 5s
 
 # Canonical team registry.
 #

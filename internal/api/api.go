@@ -32,42 +32,49 @@ type OrgResolver interface {
 	PublicMembers(ctx context.Context, org string) ([]string, error)
 }
 
+// StatusFunc returns the per-source sync status. A writer/standalone pod wires
+// the syncer's own statuses; a reader pod wires the statuses from the snapshot.
+type StatusFunc func() []syncer.SourceStatus
+
 // KeyProvider serves cached GitHub SSH public keys for indexed developers. It
 // is satisfied by *keys.Cache, and is nil when the key cache is disabled.
 type KeyProvider interface {
 	Get(handle string) (keys.Entry, bool)
 	Refresh(ctx context.Context, handle string) (keys.Entry, error)
 	Status() keys.Status
+	// Warmed reports whether the initial key pass is complete, so readiness can
+	// withhold traffic from a pod still warming its cache.
+	Warmed() bool
 }
 
 // Handler implements the coredevs HTTP API.
 type Handler struct {
-	logger *slog.Logger
-	cfg    *config.Config
-	store  *index.Store
-	syncer *syncer.Syncer
-	orgs   OrgResolver
-	keys   KeyProvider
-	mux    *http.ServeMux
+	logger   *slog.Logger
+	cfg      *config.Config
+	store    *index.Store
+	statuses StatusFunc
+	orgs     OrgResolver
+	keys     KeyProvider
+	mux      *http.ServeMux
 }
 
 var _ http.Handler = (*Handler)(nil)
 
 // New constructs the API handler and registers all routes. keyProvider may be
 // nil, in which case the key endpoints report the cache as disabled.
-func New(logger *slog.Logger, cfg *config.Config, store *index.Store, sync *syncer.Syncer, orgs OrgResolver, keyProvider KeyProvider) *Handler {
+func New(logger *slog.Logger, cfg *config.Config, store *index.Store, statuses StatusFunc, orgs OrgResolver, keyProvider KeyProvider) *Handler {
 	h := &Handler{
-		logger: logger.With(slog.String("component", "api")),
-		cfg:    cfg,
-		store:  store,
-		syncer: sync,
-		orgs:   orgs,
-		keys:   keyProvider,
-		mux:    http.NewServeMux(),
+		logger:   logger.With(slog.String("component", "api")),
+		cfg:      cfg,
+		store:    store,
+		statuses: statuses,
+		orgs:     orgs,
+		keys:     keyProvider,
+		mux:      http.NewServeMux(),
 	}
 
 	registry := prometheus.NewRegistry()
-	registry.MustRegister(newCollector(store, sync, keyProvider))
+	registry.MustRegister(newCollector(store, statuses, keyProvider))
 
 	h.mux.HandleFunc("GET /{$}", h.handleIndex)
 	h.mux.HandleFunc("GET /team/{slug}", h.handleIndex)
@@ -99,6 +106,14 @@ func (h *Handler) handleHealthz(w http.ResponseWriter, _ *http.Request) {
 func (h *Handler) handleReadyz(w http.ResponseWriter, _ *http.Request) {
 	if h.store.Get() == nil {
 		writeText(w, http.StatusServiceUnavailable, "no index\n")
+
+		return
+	}
+
+	// Withhold readiness until the key cache has warmed, so a rolling update
+	// never routes traffic to a pod that would serve partial team keys.
+	if h.keys != nil && !h.keys.Warmed() {
+		writeText(w, http.StatusServiceUnavailable, "keys warming\n")
 
 		return
 	}
@@ -327,7 +342,7 @@ func (h *Handler) handleOrgMembers(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleSources(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, r, http.StatusOK, map[string]any{
-		"sources": h.syncer.Statuses(),
+		"sources": h.statuses(),
 		"keys":    h.keysStatus(),
 	})
 }

@@ -1,5 +1,12 @@
 // Command coredevs serves the superset of Ethereum core developers across
 // datasources over an HTTP API.
+//
+// It runs in one of three cluster roles (cluster.role):
+//   - standalone: a single self-contained pod (the default; no Postgres).
+//   - writer: the one pod that syncs, fetches keys and publishes the canonical
+//     snapshot to Postgres. It receives no user traffic.
+//   - reader: a stateless serving pod that loads the published snapshot from
+//     Postgres and serves it. Many readers serve identical data — no split brain.
 package main
 
 import (
@@ -22,6 +29,7 @@ import (
 	"github.com/ethpandaops/coredevs/internal/source/githuborg"
 	manualsource "github.com/ethpandaops/coredevs/internal/source/manual"
 	"github.com/ethpandaops/coredevs/internal/source/protocolguild"
+	"github.com/ethpandaops/coredevs/internal/store"
 	"github.com/ethpandaops/coredevs/internal/syncer"
 )
 
@@ -32,7 +40,10 @@ func main() {
 }
 
 func newRootCmd() *cobra.Command {
-	var configPath string
+	var (
+		configPath string
+		role       string
+	)
 
 	cmd := &cobra.Command{
 		Use:           "coredevs",
@@ -40,16 +51,19 @@ func newRootCmd() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return run(cmd.Context(), configPath)
+			return run(cmd.Context(), configPath, role)
 		},
 	}
 
 	cmd.Flags().StringVarP(&configPath, "config", "c", "config.yaml", "path to the config file")
+	// The cluster role differs per pod but the config is baked into one image, so
+	// the writer and reader Deployments select their role with this flag.
+	cmd.Flags().StringVar(&role, "role", "", "override cluster.role: standalone, writer or reader")
 
 	return cmd
 }
 
-func run(ctx context.Context, configPath string) error {
+func run(ctx context.Context, configPath, roleOverride string) error {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	cfg, err := config.Load(configPath)
@@ -59,47 +73,49 @@ func run(ctx context.Context, configPath string) error {
 		return err
 	}
 
+	if roleOverride != "" {
+		cfg.Cluster.Role = roleOverride
+		if err := cfg.Validate(); err != nil {
+			logger.ErrorContext(ctx, "invalid role override", slog.Any("error", err))
+
+			return err
+		}
+	}
+
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	httpClient := &http.Client{Timeout: 30 * time.Second}
+	indexStore := index.NewStore()
 
-	sources, orgClient := buildSources(logger, cfg, httpClient)
-
-	floors := map[string]int{
-		source.NameProtocolGuild: cfg.Sources.ProtocolGuild.MinMembers,
-		source.NameGitHubOrg:     cfg.Sources.GitHubOrg.MinMembers,
-	}
-
-	store := index.NewStore()
-	sync := syncer.New(logger, store, sources, cfg.SyncInterval, cfg.SnapshotPath, floors, cfg.ExcludedHandles())
-
-	if err := sync.Start(ctx); err != nil {
-		logger.ErrorContext(ctx, "failed to start syncer", slog.Any("error", err))
-
-		return err
-	}
+	var cleanups []func()
 	defer func() {
-		if err := sync.Stop(); err != nil {
-			logger.ErrorContext(ctx, "failed to stop syncer", slog.Any("error", err))
+		for i := len(cleanups) - 1; i >= 0; i-- {
+			cleanups[i]()
 		}
 	}()
 
-	keyCache := buildKeyCache(logger, cfg, store, httpClient)
-	if keyCache != nil {
-		if err := keyCache.Start(ctx); err != nil {
-			logger.ErrorContext(ctx, "failed to start key cache", slog.Any("error", err))
+	logger.InfoContext(ctx, "starting", slog.String("role", cfg.Cluster.Role))
 
-			return err
-		}
-		defer func() {
-			if err := keyCache.Stop(); err != nil {
-				logger.ErrorContext(ctx, "failed to stop key cache", slog.Any("error", err))
-			}
-		}()
+	var (
+		keyProvider api.KeyProvider
+		statusFn    api.StatusFunc
+		orgs        api.OrgResolver
+	)
+
+	switch cfg.Cluster.Role {
+	case config.RoleReader:
+		keyProvider, statusFn, err = startReader(ctx, logger, cfg, indexStore, &cleanups)
+	default: // standalone or writer
+		keyProvider, statusFn, orgs, err = startSyncing(ctx, logger, cfg, httpClient, indexStore, &cleanups)
+	}
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to start", slog.Any("error", err))
+
+		return err
 	}
 
-	handler := api.New(logger, cfg, store, sync, orgResolver(orgClient), keyResolver(keyCache))
+	handler := api.New(logger, cfg, indexStore, statusFn, orgs, keyProvider)
 
 	srv := &http.Server{
 		Addr:              cfg.HTTP.Addr,
@@ -136,6 +152,69 @@ func run(ctx context.Context, configPath string) error {
 	return nil
 }
 
+// startSyncing wires the upstream syncer and key walker that drive standalone
+// and writer pods. For the writer role it also publishes snapshots to Postgres.
+func startSyncing(ctx context.Context, logger *slog.Logger, cfg *config.Config, httpClient *http.Client, indexStore *index.Store, cleanups *[]func()) (api.KeyProvider, api.StatusFunc, api.OrgResolver, error) {
+	sources, orgClient := buildSources(logger, cfg, httpClient)
+
+	floors := map[string]int{
+		source.NameProtocolGuild: cfg.Sources.ProtocolGuild.MinMembers,
+		source.NameGitHubOrg:     cfg.Sources.GitHubOrg.MinMembers,
+	}
+
+	sync := syncer.New(logger, indexStore, sources, cfg.SyncInterval, cfg.SnapshotPath, floors, cfg.ExcludedHandles())
+	if err := sync.Start(ctx); err != nil {
+		return nil, nil, nil, err
+	}
+	*cleanups = append(*cleanups, func() { _ = sync.Stop() })
+
+	keyCache := buildKeyCache(logger, cfg, indexStore, httpClient)
+	if keyCache != nil {
+		if err := keyCache.Start(ctx); err != nil {
+			return nil, nil, nil, err
+		}
+		*cleanups = append(*cleanups, func() { _ = keyCache.Stop() })
+	}
+
+	if cfg.Cluster.Role == config.RoleWriter {
+		pg, err := store.New(ctx, logger, cfg.Cluster.DSN())
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		*cleanups = append(*cleanups, pg.Close)
+
+		pub := newPublisher(logger, pg, indexStore, keyCache, sync.Statuses, cfg.Cluster.Postgres.PublishInterval)
+		pub.Start(ctx)
+		*cleanups = append(*cleanups, pub.Stop)
+	}
+
+	return keyResolver(keyCache), sync.Statuses, orgResolver(orgClient), nil
+}
+
+// startReader connects to Postgres and continuously loads the published snapshot
+// into the serving structures. Reader pods never call GitHub.
+func startReader(ctx context.Context, logger *slog.Logger, cfg *config.Config, indexStore *index.Store, cleanups *[]func()) (api.KeyProvider, api.StatusFunc, error) {
+	pg, err := store.New(ctx, logger, cfg.Cluster.DSN())
+	if err != nil {
+		return nil, nil, err
+	}
+	*cleanups = append(*cleanups, pg.Close)
+
+	reader := keys.NewReader()
+	statuses := &atomicStatuses{}
+
+	p := newPoller(logger, pg, indexStore, reader, statuses, cfg.Cluster.Postgres.RefreshInterval)
+	p.Start(ctx)
+	*cleanups = append(*cleanups, p.Stop)
+
+	var keyProvider api.KeyProvider
+	if cfg.Keys.Enabled {
+		keyProvider = reader
+	}
+
+	return keyProvider, statuses.Get, nil
+}
+
 // buildSources constructs the enabled datasources from config. The GitHub org
 // client is returned separately so the API can resolve arbitrary orgs on demand.
 func buildSources(logger *slog.Logger, cfg *config.Config, httpClient *http.Client) ([]source.Source, *githuborg.Client) {
@@ -159,16 +238,6 @@ func buildSources(logger *slog.Logger, cfg *config.Config, httpClient *http.Clie
 	}
 
 	return sources, orgClient
-}
-
-// orgResolver adapts the concrete client to the API's interface, returning a
-// nil interface when the source is disabled so the API can detect it.
-func orgResolver(c *githuborg.Client) api.OrgResolver {
-	if c == nil {
-		return nil
-	}
-
-	return c
 }
 
 // buildKeyCache constructs the GitHub key cache when enabled, sourcing its
@@ -199,7 +268,18 @@ func buildKeyCache(logger *slog.Logger, cfg *config.Config, store *index.Store, 
 		RefreshInterval:      cfg.Keys.RefreshInterval,
 		MaxRequestsPerSecond: cfg.Keys.MaxRequestsPerSecond,
 		CacheDir:             cfg.Keys.CacheDir,
+		WarmTimeout:          cfg.Keys.WarmTimeout,
 	}, handlesFn)
+}
+
+// orgResolver adapts the concrete client to the API's interface, returning a
+// nil interface when the source is disabled so the API can detect it.
+func orgResolver(c *githuborg.Client) api.OrgResolver {
+	if c == nil {
+		return nil
+	}
+
+	return c
 }
 
 // keyResolver adapts the concrete cache to the API's interface, returning a nil

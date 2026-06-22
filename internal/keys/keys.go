@@ -20,8 +20,14 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
+
+// defaultWarmTimeout bounds how long Warmed reports false before giving up on
+// the initial pass, so readiness is never blocked indefinitely by a slow or
+// unreachable upstream.
+const defaultWarmTimeout = 2 * time.Minute
 
 // Source is the provenance label reported for cached keys.
 const Source = "github-keys"
@@ -43,8 +49,14 @@ type Config struct {
 	RefreshInterval time.Duration
 	// MaxRequestsPerSecond is a hard ceiling on the upstream request rate. It
 	// bounds load when the handle set is small enough that the even-spread pace
-	// would otherwise fetch faster than this.
+	// would otherwise fetch faster than this. It also sets the pace of the fast
+	// initial warm pass, so a fresh pod becomes ready in roughly
+	// handleCount / MaxRequestsPerSecond seconds.
 	MaxRequestsPerSecond float64
+	// WarmTimeout bounds how long the cache reports not-warm on startup before
+	// readiness is allowed through regardless, so a slow upstream cannot block a
+	// pod from ever becoming ready. Zero uses a sensible default.
+	WarmTimeout time.Duration
 	// CacheDir holds one file per handle, persisting each developer's keys as
 	// soon as they are fetched so partial progress survives a restart. Empty
 	// disables persistence.
@@ -86,11 +98,15 @@ type Status struct {
 
 // Cache is the rate-paced GitHub key cache.
 type Cache struct {
-	logger    *slog.Logger
-	http      *http.Client
-	cfg       Config
-	handlesFn HandlesFunc
-	minDelay  time.Duration
+	logger      *slog.Logger
+	http        *http.Client
+	cfg         Config
+	handlesFn   HandlesFunc
+	minDelay    time.Duration
+	warmTimeout time.Duration
+
+	warmed    atomic.Bool
+	startedAt atomic.Int64
 
 	mu        sync.RWMutex
 	entries   map[string]*Entry
@@ -115,14 +131,20 @@ func New(logger *slog.Logger, httpClient *http.Client, cfg Config, handlesFn Han
 		minDelay = time.Duration(float64(time.Second) / cfg.MaxRequestsPerSecond)
 	}
 
+	warmTimeout := cfg.WarmTimeout
+	if warmTimeout <= 0 {
+		warmTimeout = defaultWarmTimeout
+	}
+
 	return &Cache{
-		logger:    logger.With(slog.String("component", "keys")),
-		http:      httpClient,
-		cfg:       cfg,
-		handlesFn: handlesFn,
-		minDelay:  minDelay,
-		entries:   make(map[string]*Entry, 0),
-		done:      make(chan struct{}),
+		logger:      logger.With(slog.String("component", "keys")),
+		http:        httpClient,
+		cfg:         cfg,
+		handlesFn:   handlesFn,
+		minDelay:    minDelay,
+		warmTimeout: warmTimeout,
+		entries:     make(map[string]*Entry, 0),
+		done:        make(chan struct{}),
 	}
 }
 
@@ -130,12 +152,17 @@ func New(logger *slog.Logger, httpClient *http.Client, cfg Config, handlesFn Han
 // availability, then walks the handle set continuously in the background until
 // Stop is called or ctx is cancelled.
 func (c *Cache) Start(ctx context.Context) error {
+	c.startedAt.Store(time.Now().UnixNano())
+
 	if cached, err := loadCache(c.cfg.CacheDir); err != nil {
 		c.logger.WarnContext(ctx, "failed to load keys cache", slog.Any("error", err))
 	} else if len(cached) > 0 {
 		c.mu.Lock()
 		c.entries = cached
 		c.mu.Unlock()
+		// A populated on-disk cache is already warm: serve immediately rather than
+		// blocking readiness for a fresh pass.
+		c.warmed.Store(true)
 		c.logger.InfoContext(ctx, "serving keys from cache", slog.Int("handles", len(cached)))
 	}
 
@@ -175,6 +202,20 @@ func (c *Cache) Refresh(ctx context.Context, handle string) (Entry, error) {
 	return c.fetchOne(ctx, handle), nil
 }
 
+// Snapshot returns a copy of every cached entry keyed by lowercased handle, for
+// the writer to publish to the shared store.
+func (c *Cache) Snapshot() map[string]Entry {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	out := make(map[string]Entry, len(c.entries))
+	for k, e := range c.entries {
+		out[k] = *e
+	}
+
+	return out
+}
+
 // Status returns a snapshot of the cache state.
 func (c *Cache) Status() Status {
 	c.mu.RLock()
@@ -199,8 +240,23 @@ func (c *Cache) Status() Status {
 	return st
 }
 
-// walk continuously refreshes the desired handle set round-robin, pacing each
-// fetch so a full pass spans RefreshInterval without exceeding the RPS ceiling.
+// Warmed reports whether the cache has completed its first full pass (so every
+// handle has been fetched once) — or whether the warm timeout has elapsed, so a
+// slow upstream cannot block readiness forever. Consumers gate readiness on this
+// so a fresh pod never serves partial team keys.
+func (c *Cache) Warmed() bool {
+	if c.warmed.Load() {
+		return true
+	}
+
+	started := c.startedAt.Load()
+
+	return started != 0 && time.Since(time.Unix(0, started)) > c.warmTimeout
+}
+
+// walk continuously refreshes the desired handle set round-robin. The first pass
+// runs at the RPS ceiling so a fresh pod warms quickly; subsequent passes are
+// spread evenly across RefreshInterval.
 func (c *Cache) walk(ctx context.Context) {
 	defer c.wg.Done()
 
@@ -209,6 +265,8 @@ func (c *Cache) walk(ctx context.Context) {
 		c.prune(ctx, handles)
 
 		if len(handles) == 0 {
+			// Nothing to fetch: there is no warming to do, so don't hold readiness.
+			c.warmed.Store(true)
 			if !c.sleep(ctx, time.Minute) {
 				return
 			}
@@ -216,7 +274,14 @@ func (c *Cache) walk(ctx context.Context) {
 			continue
 		}
 
+		warming := !c.warmed.Load()
+
 		delay := c.paceFor(len(handles))
+		if warming {
+			// Warm as fast as the RPS ceiling allows rather than at the slow
+			// steady-state pace, so readiness clears in ~handleCount/maxRPS seconds.
+			delay = c.minDelay
+		}
 
 		c.mu.Lock()
 		c.pace = delay
@@ -225,6 +290,7 @@ func (c *Cache) walk(ctx context.Context) {
 		c.logger.InfoContext(ctx, "starting key refresh cycle",
 			slog.Int("handles", len(handles)),
 			slog.Duration("pace", delay),
+			slog.Bool("warming", warming),
 		)
 
 		for _, h := range handles {
@@ -246,6 +312,8 @@ func (c *Cache) walk(ctx context.Context) {
 		c.mu.Lock()
 		c.lastCycle = time.Now().UTC()
 		c.mu.Unlock()
+
+		c.warmed.Store(true)
 	}
 }
 

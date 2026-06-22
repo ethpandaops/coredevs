@@ -24,7 +24,10 @@ import (
 // fakeKeys is an in-memory KeyProvider for handler tests.
 type fakeKeys struct {
 	entries map[string]keys.Entry
+	warmed  bool
 }
+
+func (f *fakeKeys) Warmed() bool { return f.warmed }
 
 func (f *fakeKeys) Get(handle string) (keys.Entry, bool) {
 	e, ok := f.entries[strings.ToLower(handle)]
@@ -65,7 +68,7 @@ func newTestHandler(t *testing.T, keyProvider KeyProvider) *Handler {
 
 	sync := syncer.New(logger, store, nil, time.Hour, "", nil, nil)
 
-	return New(logger, cfg, store, sync, nil, keyProvider)
+	return New(logger, cfg, store, sync.Statuses, nil, keyProvider)
 }
 
 func TestTeamKeysTxtAssemblesAuthorizedKeys(t *testing.T) {
@@ -152,4 +155,22 @@ func TestKeysEndpointsDisabledWithoutProvider(t *testing.T) {
 		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 		assert.Equal(t, http.StatusServiceUnavailable, rec.Code, path)
 	}
+}
+
+func TestReadyzGatesOnKeysWarm(t *testing.T) {
+	cold := newTestHandler(t, &fakeKeys{entries: map[string]keys.Entry{}, warmed: false})
+	rec := httptest.NewRecorder()
+	cold.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code, "cold keys cache must not be ready")
+
+	warm := newTestHandler(t, &fakeKeys{entries: map[string]keys.Entry{}, warmed: true})
+	rec = httptest.NewRecorder()
+	warm.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	assert.Equal(t, http.StatusOK, rec.Code, "warm keys cache is ready")
+
+	// With keys disabled, readiness depends only on the index being present.
+	noKeys := newTestHandler(t, nil)
+	rec = httptest.NewRecorder()
+	noKeys.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	assert.Equal(t, http.StatusOK, rec.Code, "keys disabled: ready once index is up")
 }
