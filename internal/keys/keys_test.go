@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -164,20 +166,73 @@ func TestRefreshPreservesLastGoodOnError(t *testing.T) {
 }
 
 func TestPruneDropsUnwantedHandles(t *testing.T) {
+	dir := t.TempDir()
 	c := testCache(t, Config{
+		CacheDir:             dir,
 		RefreshInterval:      time.Hour,
 		MaxRequestsPerSecond: 100,
 	}, func() []string { return nil })
 
 	c.entries["alice"] = &Entry{Handle: "alice"}
 	c.entries["bob"] = &Entry{Handle: "bob"}
+	require.NoError(t, writeEntry(dir, "bob", Entry{Handle: "bob"}))
 
-	c.prune([]string{"Alice"}) // case-insensitive keep
+	c.prune(context.Background(), []string{"Alice"}) // case-insensitive keep
 
 	_, hasAlice := c.Get("alice")
 	_, hasBob := c.Get("bob")
 	assert.True(t, hasAlice)
 	assert.False(t, hasBob)
+
+	// bob's on-disk file is removed too.
+	_, err := os.Stat(filepath.Join(dir, "bob.json"))
+	assert.True(t, os.IsNotExist(err))
+}
+
+// TestFetchPersistsPerHandleImmediately is the core guard for the design: each
+// successful fetch writes that handle's file right away, and a fresh cache
+// loaded from the same dir sees it — so partial progress survives a restart
+// without waiting for a full pass.
+func TestFetchPersistsPerHandleImmediately(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "ssh-ed25519 AAA\n")
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	cfg := Config{
+		BaseURL:              srv.URL,
+		CacheDir:             dir,
+		RefreshInterval:      time.Hour,
+		MaxRequestsPerSecond: 100,
+	}
+
+	c := testCache(t, cfg, func() []string { return nil })
+
+	_, err := c.Refresh(context.Background(), "Alice")
+	require.NoError(t, err)
+
+	// The file exists immediately (keyed by lowercased handle).
+	_, err = os.Stat(filepath.Join(dir, "alice.json"))
+	require.NoError(t, err)
+
+	// A brand-new cache over the same dir loads it on Start.
+	fresh := testCache(t, cfg, func() []string { return nil })
+	loaded, err := loadCache(fresh.cfg.CacheDir)
+	require.NoError(t, err)
+	require.Contains(t, loaded, "alice")
+	assert.Equal(t, []string{"ssh-ed25519 AAA"}, loaded["alice"].Keys)
+}
+
+func TestEntryFileNameRejectsUnsafeKeys(t *testing.T) {
+	for _, bad := range []string{"", "../escape", "a/b", "Up", "dot.dot", "semi;colon"} {
+		_, ok := entryFileName(bad)
+		assert.False(t, ok, "key %q must be rejected", bad)
+	}
+
+	name, ok := entryFileName("octant-dev_1")
+	assert.True(t, ok)
+	assert.Equal(t, "octant-dev_1.json", name)
 }
 
 func TestWalkRefreshesDesiredSet(t *testing.T) {

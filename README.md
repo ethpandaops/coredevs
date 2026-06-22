@@ -97,9 +97,11 @@ delay = max(refreshInterval / handleCount, 1 / maxRequestsPerSecond)
   a small handle set never bursts against GitHub.
 
 With ~300 handles and a 3h window that is one request every ~36s (~0.03 req/s).
-The cache is served from memory, persisted to `keys.snapshotPath`, and reloaded
-on restart so keys are available immediately on boot. A transient GitHub failure
-keeps the last good keys rather than dropping a developer.
+The cache is served from memory and persisted per handle to `keys.cacheDir`
+(one file per developer, written as soon as that handle is fetched), so a
+restart keeps everything fetched so far rather than waiting for a full pass. A
+transient GitHub failure keeps the last good keys rather than dropping a
+developer.
 
 | Path | `format` | Returns |
 | --- | --- | --- |

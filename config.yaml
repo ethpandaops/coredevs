@@ -46,8 +46,10 @@ keys:
   refreshInterval: 1h
   # Hard ceiling on the upstream request rate.
   maxRequestsPerSecond: 5
-  # Last-good key cache persisted here between restarts. Mounted from a PVC in k8s.
-  snapshotPath: /data/keys.json
+  # Per-handle key cache directory (one file per developer), on the PVC. Each
+  # handle is written as soon as it is fetched, so a restart keeps everything
+  # fetched so far. Empty disables persistence.
+  cacheDir: /data/keys
 
 # Canonical team registry.
 #

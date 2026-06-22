@@ -45,8 +45,10 @@ type Config struct {
 	// bounds load when the handle set is small enough that the even-spread pace
 	// would otherwise fetch faster than this.
 	MaxRequestsPerSecond float64
-	// SnapshotPath persists the cache between restarts. Empty disables it.
-	SnapshotPath string
+	// CacheDir holds one file per handle, persisting each developer's keys as
+	// soon as they are fetched so partial progress survives a restart. Empty
+	// disables persistence.
+	CacheDir string
 }
 
 // Entry is a single developer's cached keys and the freshness of that cache.
@@ -124,17 +126,17 @@ func New(logger *slog.Logger, httpClient *http.Client, cfg Config, handlesFn Han
 	}
 }
 
-// Start seeds the cache from the on-disk snapshot for immediate availability,
-// then walks the handle set continuously in the background until Stop is called
-// or ctx is cancelled.
+// Start seeds the cache from the on-disk per-handle files for immediate
+// availability, then walks the handle set continuously in the background until
+// Stop is called or ctx is cancelled.
 func (c *Cache) Start(ctx context.Context) error {
-	if snap, err := loadSnapshot(c.cfg.SnapshotPath); err != nil {
-		c.logger.WarnContext(ctx, "failed to load keys snapshot", slog.Any("error", err))
-	} else if len(snap) > 0 {
+	if cached, err := loadCache(c.cfg.CacheDir); err != nil {
+		c.logger.WarnContext(ctx, "failed to load keys cache", slog.Any("error", err))
+	} else if len(cached) > 0 {
 		c.mu.Lock()
-		c.entries = snap
+		c.entries = cached
 		c.mu.Unlock()
-		c.logger.InfoContext(ctx, "serving keys from snapshot", slog.Int("handles", len(snap)))
+		c.logger.InfoContext(ctx, "serving keys from cache", slog.Int("handles", len(cached)))
 	}
 
 	c.wg.Add(1)
@@ -204,7 +206,7 @@ func (c *Cache) walk(ctx context.Context) {
 
 	for {
 		handles := c.handlesFn()
-		c.prune(handles)
+		c.prune(ctx, handles)
 
 		if len(handles) == 0 {
 			if !c.sleep(ctx, time.Minute) {
@@ -244,10 +246,6 @@ func (c *Cache) walk(ctx context.Context) {
 		c.mu.Lock()
 		c.lastCycle = time.Now().UTC()
 		c.mu.Unlock()
-
-		if err := saveSnapshot(c.snapshotEntries(), c.cfg.SnapshotPath); err != nil {
-			c.logger.WarnContext(ctx, "failed to save keys snapshot", slog.Any("error", err))
-		}
 	}
 }
 
@@ -269,10 +267,9 @@ func (c *Cache) fetchOne(ctx context.Context, handle string) Entry {
 
 	keys, err := c.fetch(ctx, handle)
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	key := strings.ToLower(handle)
+
+	c.mu.Lock()
 	e, ok := c.entries[key]
 	if !ok {
 		e = &Entry{Handle: handle}
@@ -282,18 +279,30 @@ func (c *Cache) fetchOne(ctx context.Context, handle string) Entry {
 
 	if err != nil {
 		e.LastError = err.Error()
+		snapshot := *e
+		c.mu.Unlock()
+
 		c.logger.WarnContext(ctx, "key fetch failed",
 			slog.String("handle", handle), slog.Any("error", err))
 
-		return *e
+		return snapshot
 	}
 
 	e.Keys = keys
 	e.FetchedAt = now
 	e.LastError = ""
 	c.lastFetch = now
+	snapshot := *e
+	c.mu.Unlock()
 
-	return *e
+	// Persist this one handle immediately so a restart keeps every developer
+	// fetched so far, rather than waiting for a full pass to complete.
+	if err := writeEntry(c.cfg.CacheDir, key, snapshot); err != nil {
+		c.logger.WarnContext(ctx, "failed to persist keys",
+			slog.String("handle", handle), slog.Any("error", err))
+	}
+
+	return snapshot
 }
 
 // fetch performs the single upstream request for a handle's keys.
@@ -326,35 +335,31 @@ func (c *Cache) fetch(ctx context.Context, handle string) ([]string, error) {
 	return parseKeys(resp.Body)
 }
 
-// prune drops cached entries for handles no longer in the desired set.
-func (c *Cache) prune(handles []string) {
+// prune drops cached entries, in memory and on disk, for handles no longer in
+// the desired set.
+func (c *Cache) prune(ctx context.Context, handles []string) {
 	want := make(map[string]struct{}, len(handles))
 	for _, h := range handles {
 		want[strings.ToLower(h)] = struct{}{}
 	}
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	var removed []string
 
+	c.mu.Lock()
 	for key := range c.entries {
 		if _, ok := want[key]; !ok {
 			delete(c.entries, key)
+			removed = append(removed, key)
 		}
 	}
-}
+	c.mu.Unlock()
 
-// snapshotEntries returns a copy of the cache safe to serialise without holding
-// the lock.
-func (c *Cache) snapshotEntries() map[string]Entry {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	out := make(map[string]Entry, len(c.entries))
-	for key, e := range c.entries {
-		out[key] = *e
+	for _, key := range removed {
+		if err := removeEntry(c.cfg.CacheDir, key); err != nil {
+			c.logger.WarnContext(ctx, "failed to remove cached keys",
+				slog.String("handle", key), slog.Any("error", err))
+		}
 	}
-
-	return out
 }
 
 // sleep waits for d or returns false if the cache is shutting down.
