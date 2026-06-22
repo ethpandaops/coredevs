@@ -17,6 +17,7 @@ import (
 	"github.com/ethpandaops/coredevs/internal/api"
 	"github.com/ethpandaops/coredevs/internal/config"
 	"github.com/ethpandaops/coredevs/internal/index"
+	"github.com/ethpandaops/coredevs/internal/keys"
 	"github.com/ethpandaops/coredevs/internal/source"
 	"github.com/ethpandaops/coredevs/internal/source/githuborg"
 	manualsource "github.com/ethpandaops/coredevs/internal/source/manual"
@@ -84,7 +85,21 @@ func run(ctx context.Context, configPath string) error {
 		}
 	}()
 
-	handler := api.New(logger, cfg, store, sync, orgResolver(orgClient))
+	keyCache := buildKeyCache(logger, cfg, store, httpClient)
+	if keyCache != nil {
+		if err := keyCache.Start(ctx); err != nil {
+			logger.ErrorContext(ctx, "failed to start key cache", slog.Any("error", err))
+
+			return err
+		}
+		defer func() {
+			if err := keyCache.Stop(); err != nil {
+				logger.ErrorContext(ctx, "failed to stop key cache", slog.Any("error", err))
+			}
+		}()
+	}
+
+	handler := api.New(logger, cfg, store, sync, orgResolver(orgClient), keyResolver(keyCache))
 
 	srv := &http.Server{
 		Addr:              cfg.HTTP.Addr,
@@ -149,6 +164,47 @@ func buildSources(logger *slog.Logger, cfg *config.Config, httpClient *http.Clie
 // orgResolver adapts the concrete client to the API's interface, returning a
 // nil interface when the source is disabled so the API can detect it.
 func orgResolver(c *githuborg.Client) api.OrgResolver {
+	if c == nil {
+		return nil
+	}
+
+	return c
+}
+
+// buildKeyCache constructs the GitHub key cache when enabled, sourcing its
+// handle set from the live deduplicated index. It returns nil when disabled.
+func buildKeyCache(logger *slog.Logger, cfg *config.Config, store *index.Store, httpClient *http.Client) *keys.Cache {
+	if !cfg.Keys.Enabled {
+		return nil
+	}
+
+	handlesFn := func() []string {
+		idx := store.Get()
+		if idx == nil {
+			return nil
+		}
+
+		users := idx.Users()
+		handles := make([]string, 0, len(users))
+		for _, u := range users {
+			handles = append(handles, u.Handle)
+		}
+
+		return handles
+	}
+
+	return keys.New(logger, httpClient, keys.Config{
+		Enabled:              cfg.Keys.Enabled,
+		BaseURL:              cfg.Keys.BaseURL,
+		RefreshInterval:      cfg.Keys.RefreshInterval,
+		MaxRequestsPerSecond: cfg.Keys.MaxRequestsPerSecond,
+		SnapshotPath:         cfg.Keys.SnapshotPath,
+	}, handlesFn)
+}
+
+// keyResolver adapts the concrete cache to the API's interface, returning a nil
+// interface when the cache is disabled so the API can detect it.
+func keyResolver(c *keys.Cache) api.KeyProvider {
 	if c == nil {
 		return nil
 	}

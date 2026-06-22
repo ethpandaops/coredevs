@@ -27,6 +27,27 @@ sources:
     tokenEnv: GITHUB_TOKEN
     minMembers: 0
 
+# GitHub SSH public-key cache. A rate-paced proxy that fetches each indexed
+# developer's keys (github.com/<handle>.keys) in the background, so consumers
+# read a team's authorized_keys from coredevs without ever calling GitHub.
+#
+# Pacing — "don't hammer GitHub, but don't take forever": a single walker fetches
+# one handle at a time, with the delay between fetches derived as
+#   delay = max(refreshInterval / handleCount, 1 / maxRequestsPerSecond)
+# The set is spread evenly across refreshInterval (so a handle is refreshed about
+# once per window), while maxRequestsPerSecond caps the burst rate. With ~300
+# handles and a 12h window that's one request every ~2.4 min — barely a tickle.
+keys:
+  enabled: true
+  baseURL: https://github.com
+  # Target staleness: each handle is refreshed roughly once per this window.
+  # Lower it for fresher keys; the RPS ceiling still protects GitHub.
+  refreshInterval: 12h
+  # Hard ceiling on the upstream request rate.
+  maxRequestsPerSecond: 2
+  # Last-good key cache persisted here between restarts. Mounted from a PVC in k8s.
+  snapshotPath: /data/keys.json
+
 # Canonical team registry.
 #
 # protocolGuildSections: working-group headers in the Protocol Guild document.

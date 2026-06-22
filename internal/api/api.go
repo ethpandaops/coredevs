@@ -18,6 +18,7 @@ import (
 
 	"github.com/ethpandaops/coredevs/internal/config"
 	"github.com/ethpandaops/coredevs/internal/index"
+	"github.com/ethpandaops/coredevs/internal/keys"
 	"github.com/ethpandaops/coredevs/internal/source"
 	"github.com/ethpandaops/coredevs/internal/syncer"
 )
@@ -31,6 +32,14 @@ type OrgResolver interface {
 	PublicMembers(ctx context.Context, org string) ([]string, error)
 }
 
+// KeyProvider serves cached GitHub SSH public keys for indexed developers. It
+// is satisfied by *keys.Cache, and is nil when the key cache is disabled.
+type KeyProvider interface {
+	Get(handle string) (keys.Entry, bool)
+	Refresh(ctx context.Context, handle string) (keys.Entry, error)
+	Status() keys.Status
+}
+
 // Handler implements the coredevs HTTP API.
 type Handler struct {
 	logger *slog.Logger
@@ -38,24 +47,27 @@ type Handler struct {
 	store  *index.Store
 	syncer *syncer.Syncer
 	orgs   OrgResolver
+	keys   KeyProvider
 	mux    *http.ServeMux
 }
 
 var _ http.Handler = (*Handler)(nil)
 
-// New constructs the API handler and registers all routes.
-func New(logger *slog.Logger, cfg *config.Config, store *index.Store, sync *syncer.Syncer, orgs OrgResolver) *Handler {
+// New constructs the API handler and registers all routes. keyProvider may be
+// nil, in which case the key endpoints report the cache as disabled.
+func New(logger *slog.Logger, cfg *config.Config, store *index.Store, sync *syncer.Syncer, orgs OrgResolver, keyProvider KeyProvider) *Handler {
 	h := &Handler{
 		logger: logger.With(slog.String("component", "api")),
 		cfg:    cfg,
 		store:  store,
 		syncer: sync,
 		orgs:   orgs,
+		keys:   keyProvider,
 		mux:    http.NewServeMux(),
 	}
 
 	registry := prometheus.NewRegistry()
-	registry.MustRegister(newCollector(store, sync))
+	registry.MustRegister(newCollector(store, sync, keyProvider))
 
 	h.mux.HandleFunc("GET /{$}", h.handleIndex)
 	h.mux.HandleFunc("GET /team/{slug}", h.handleIndex)
@@ -65,7 +77,9 @@ func New(logger *slog.Logger, cfg *config.Config, store *index.Store, sync *sync
 	h.mux.HandleFunc("GET /api/v1/teams", h.handleTeams)
 	h.mux.HandleFunc("GET /api/v1/users", h.handleAllUsers)
 	h.mux.HandleFunc("GET /api/v1/users/{team}", h.handleUsers)
+	h.mux.HandleFunc("GET /api/v1/users/{team}/keys", h.handleTeamKeys)
 	h.mux.HandleFunc("GET /api/v1/handles/{handle}", h.handleHandle)
+	h.mux.HandleFunc("GET /api/v1/handles/{handle}/keys", h.handleHandleKeys)
 	h.mux.HandleFunc("GET /api/v1/orgs/{org}/members", h.handleOrgMembers)
 	h.mux.HandleFunc("GET /api/v1/sources", h.handleSources)
 	h.mux.HandleFunc("GET /api/v1/export", h.handleExport)
@@ -314,7 +328,18 @@ func (h *Handler) handleOrgMembers(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleSources(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, r, http.StatusOK, map[string]any{
 		"sources": h.syncer.Statuses(),
+		"keys":    h.keysStatus(),
 	})
+}
+
+// keysStatus returns the key cache status, or a disabled marker when the cache
+// is not configured.
+func (h *Handler) keysStatus() keys.Status {
+	if h.keys == nil {
+		return keys.Status{Enabled: false}
+	}
+
+	return h.keys.Status()
 }
 
 func (h *Handler) handleExport(w http.ResponseWriter, r *http.Request) {
