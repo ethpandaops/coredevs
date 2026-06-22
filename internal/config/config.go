@@ -154,7 +154,7 @@ func Default() *Config {
 		Keys: Keys{
 			Enabled:              true,
 			BaseURL:              "https://github.com",
-			RefreshInterval:      time.Hour,
+			RefreshInterval:      3 * time.Hour,
 			MaxRequestsPerSecond: 5,
 		},
 		Teams: make(map[string]Team, 0),
