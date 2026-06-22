@@ -90,15 +90,16 @@ from two knobs in `keys:` config:
 delay = max(refreshInterval / handleCount, 1 / maxRequestsPerSecond)
 ```
 
-- `refreshInterval` (default `12h`) is the target staleness — each handle is
-  refreshed about once per window. Lower it for fresher keys.
-- `maxRequestsPerSecond` (default `2`) is a hard ceiling on the request rate, so
+- `refreshInterval` (default `1h`) is the target staleness — a full pass
+  completes about once per window, so a key change shows up within it. Lower it
+  for fresher keys.
+- `maxRequestsPerSecond` (default `5`) is a hard ceiling on the request rate, so
   a small handle set never bursts against GitHub.
 
-With ~300 handles and a 12h window that is one request every ~2.4 min. The cache
-is served from memory, persisted to `keys.snapshotPath`, and reloaded on restart
-so keys are available immediately on boot. A transient GitHub failure keeps the
-last good keys rather than dropping a developer.
+With ~300 handles and a 1h window that is one request every ~12s (~0.08 req/s).
+The cache is served from memory, persisted to `keys.snapshotPath`, and reloaded
+on restart so keys are available immediately on boot. A transient GitHub failure
+keeps the last good keys rather than dropping a developer.
 
 | Path | `format` | Returns |
 | --- | --- | --- |
