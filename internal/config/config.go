@@ -89,8 +89,10 @@ type Keys struct {
 	// guards GitHub when the handle set is small enough that the even-spread pace
 	// would otherwise fetch faster than this.
 	MaxRequestsPerSecond float64 `yaml:"maxRequestsPerSecond"`
-	// SnapshotPath persists the cache between restarts. Empty disables it.
-	SnapshotPath string `yaml:"snapshotPath"`
+	// CacheDir is a directory holding one file per handle, persisting each
+	// developer's keys as soon as they are fetched so partial progress survives a
+	// restart. Empty disables persistence.
+	CacheDir string `yaml:"cacheDir"`
 }
 
 // Team describes a canonical team and how it maps onto upstream sources.

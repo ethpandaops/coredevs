@@ -198,7 +198,7 @@ func buildKeyCache(logger *slog.Logger, cfg *config.Config, store *index.Store, 
 		BaseURL:              cfg.Keys.BaseURL,
 		RefreshInterval:      cfg.Keys.RefreshInterval,
 		MaxRequestsPerSecond: cfg.Keys.MaxRequestsPerSecond,
-		SnapshotPath:         cfg.Keys.SnapshotPath,
+		CacheDir:             cfg.Keys.CacheDir,
 	}, handlesFn)
 }
 
