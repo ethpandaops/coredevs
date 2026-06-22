@@ -92,6 +92,22 @@ func TestUsersDedupesAcrossTeams(t *testing.T) {
 	assert.Equal(t, "Paul Harris", users[1].Name)
 }
 
+// TestUsersCasingDeterministic guards against the display casing depending on
+// map iteration order: the casing from the alphabetically-first team must win on
+// every call.
+func TestUsersCasingDeterministic(t *testing.T) {
+	idx := Build(time.Now().UTC(), []source.Membership{
+		{Handle: "MarcoPolo", Team: "prysm", Source: source.NameGitHubOrg},
+		{Handle: "marcopolo", Team: "lighthouse", Source: source.NameProtocolGuild},
+	})
+
+	for range 50 {
+		users := idx.Users()
+		require.Len(t, users, 1)
+		assert.Equal(t, "marcopolo", users[0].Handle, "casing must come from the first team by slug")
+	}
+}
+
 func TestStoreAtomicSwap(t *testing.T) {
 	s := NewStore()
 	assert.Nil(t, s.Get())

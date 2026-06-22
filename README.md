@@ -48,9 +48,11 @@ just the client teams.
 | --- | --- |
 | `GET /api/v1/teams` | All teams with per-source member counts. `?kind=` filters by role. |
 | `GET /api/v1/users/{team}` | The superset of handles for a team. |
+| `GET /api/v1/users/{team}/keys` | The assembled `authorized_keys` for a team (see below). |
 | `GET /api/v1/handles/{handle}` | Reverse lookup: every team a handle appears on. |
+| `GET /api/v1/handles/{handle}/keys` | A single developer's cached SSH public keys. |
 | `GET /api/v1/orgs/{org}/members` | Public members of an arbitrary GitHub org, on demand. |
-| `GET /api/v1/sources` | Per-source sync status (last attempt/success/error). |
+| `GET /api/v1/sources` | Per-source sync status (last attempt/success/error) plus key-cache status. |
 | `GET /api/v1/export` | The full index as JSON. |
 | `GET /healthz` | Liveness. |
 | `GET /readyz` | Readiness — 503 until the first index is available. |
@@ -73,6 +75,51 @@ curl https://coredevs.example/api/v1/users/lighthouse?source=protocol-guild
 # Who publicly lists the sigp org on their profile
 curl https://coredevs.example/api/v1/orgs/sigp/members
 ```
+
+## GitHub key proxy
+
+`coredevs` caches each indexed developer's **SSH public keys**
+(`https://github.com/<handle>.keys`) so devnet tooling can fetch a whole team's
+`authorized_keys` from one place instead of hitting GitHub once per developer.
+
+A single background walker refreshes the keys round-robin, pacing itself so the
+work is spread evenly rather than bursting. The delay between fetches is derived
+from two knobs in `keys:` config:
+
+```
+delay = max(refreshInterval / handleCount, 1 / maxRequestsPerSecond)
+```
+
+- `refreshInterval` (default `3h`) is the target staleness — a full pass
+  completes about once per window, so a key change shows up within it. Lower it
+  for fresher keys.
+- `maxRequestsPerSecond` (default `5`) is a hard ceiling on the request rate, so
+  a small handle set never bursts against GitHub.
+
+With ~300 handles and a 3h window that is one request every ~36s (~0.03 req/s).
+The cache is served from memory, persisted to `keys.snapshotPath`, and reloaded
+on restart so keys are available immediately on boot. A transient GitHub failure
+keeps the last good keys rather than dropping a developer.
+
+| Path | `format` | Returns |
+| --- | --- | --- |
+| `GET /api/v1/users/{team}/keys` | `txt` (default) | A ready-to-use `authorized_keys` file: each developer's keys, prefixed by a `# handle` comment. |
+| `GET /api/v1/users/{team}/keys` | `json` | Per-handle keys with `fetchedAt` and a `pending` flag for handles not yet fetched. |
+| `GET /api/v1/handles/{handle}/keys` | `json` (default) | One developer's keys plus `fetchedAt`. A cold miss for an indexed handle triggers one on-demand fetch. |
+| `GET /api/v1/handles/{handle}/keys` | `txt` | Newline-separated keys for one developer. |
+
+```bash
+# authorized_keys for the entire Geth team
+curl https://coredevs.example/api/v1/users/geth/keys > authorized_keys
+
+# One developer's keys
+curl https://coredevs.example/api/v1/handles/karalabe/keys?format=txt
+```
+
+The team endpoint serves only what is already cached (the walker keeps it warm);
+the single-handle endpoint fetches on demand for a cold, *indexed* handle so a
+first request is never empty. Unknown handles return `404` — the endpoint is not
+an open proxy for arbitrary GitHub logins.
 
 ## Configuration
 

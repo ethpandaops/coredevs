@@ -22,6 +22,8 @@ type Config struct {
 	SnapshotPath string `yaml:"snapshotPath"`
 	// Sources configures the upstream datasources.
 	Sources Sources `yaml:"sources"`
+	// Keys configures the GitHub SSH public-key cache.
+	Keys Keys `yaml:"keys"`
 	// Teams is the canonical team registry keyed by team slug.
 	Teams map[string]Team `yaml:"teams"`
 	// Exclude lists GitHub handles to drop from every team, regardless of source.
@@ -68,6 +70,27 @@ type GitHubOrg struct {
 	TokenEnv string `yaml:"tokenEnv"`
 	// MinMembers is a sanity floor; see ProtocolGuild.MinMembers. 0 disables it.
 	MinMembers int `yaml:"minMembers"`
+}
+
+// Keys configures the GitHub SSH public-key cache: a rate-paced proxy that
+// fetches each indexed developer's keys in the background so consumers read a
+// team's authorized_keys from coredevs without ever calling GitHub themselves.
+type Keys struct {
+	// Enabled toggles the key cache and its endpoints.
+	Enabled bool `yaml:"enabled"`
+	// BaseURL is the host serving the `.keys` endpoint (default
+	// https://github.com). The cache requests "{baseURL}/{handle}.keys".
+	BaseURL string `yaml:"baseURL"`
+	// RefreshInterval is the target staleness: the cache paces itself so every
+	// handle is refreshed roughly once per this window. A full pass is spread
+	// evenly across the window rather than fetched in a burst.
+	RefreshInterval time.Duration `yaml:"refreshInterval"`
+	// MaxRequestsPerSecond is a hard ceiling on the upstream request rate. It
+	// guards GitHub when the handle set is small enough that the even-spread pace
+	// would otherwise fetch faster than this.
+	MaxRequestsPerSecond float64 `yaml:"maxRequestsPerSecond"`
+	// SnapshotPath persists the cache between restarts. Empty disables it.
+	SnapshotPath string `yaml:"snapshotPath"`
 }
 
 // Team describes a canonical team and how it maps onto upstream sources.
@@ -127,6 +150,12 @@ func Default() *Config {
 				BaseURL:  "https://api.github.com",
 				TokenEnv: "GITHUB_TOKEN",
 			},
+		},
+		Keys: Keys{
+			Enabled:              true,
+			BaseURL:              "https://github.com",
+			RefreshInterval:      3 * time.Hour,
+			MaxRequestsPerSecond: 5,
 		},
 		Teams: make(map[string]Team, 0),
 	}
@@ -197,6 +226,15 @@ func (c *Config) validate() error {
 
 	if len(c.Teams) == 0 {
 		return fmt.Errorf("at least one team must be configured")
+	}
+
+	if c.Keys.Enabled {
+		if c.Keys.RefreshInterval <= 0 {
+			return fmt.Errorf("keys.refreshInterval must be positive, got %s", c.Keys.RefreshInterval)
+		}
+		if c.Keys.MaxRequestsPerSecond <= 0 {
+			return fmt.Errorf("keys.maxRequestsPerSecond must be positive, got %g", c.Keys.MaxRequestsPerSecond)
+		}
 	}
 
 	for slug, team := range c.Teams {

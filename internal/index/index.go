@@ -154,10 +154,15 @@ func (i *Index) Members(team, sourceFilter string) []*Member {
 // Users returns every developer across all teams, deduplicated case-insensitively
 // by handle, with their teams, sources and orgs folded together and sorted by
 // handle. This is the people-centric view of the registry.
+//
+// Teams are folded in sorted slug order so a handle's display casing is
+// deterministic — the casing from the alphabetically-first team wins, rather
+// than depending on map iteration order.
 func (i *Index) Users() []*User {
 	agg := make(map[string]*User, 0)
 
-	for slug, team := range i.Teams {
+	for _, slug := range i.TeamSlugs() {
+		team := i.Teams[slug]
 		for key, m := range team.Members {
 			u, ok := agg[key]
 			if !ok {
