@@ -85,9 +85,10 @@ resources:
     cpu: 50m
     memory: 96Mi
   limits:
-    # Headroom for bursts; load testing showed <100m even at 1000 rps, but a
-    # higher ceiling lets a single pod soak a spike without CFS throttling.
-    cpu: "1"
+    # Generous burst ceiling. Serving is in-memory and cheap (<100m at 1000 rps
+    # in load tests), so this is rarely approached, but it lets a pod soak a
+    # large spike without CFS throttling.
+    cpu: "4"
     memory: 256Mi
 
 podSecurityContext:
