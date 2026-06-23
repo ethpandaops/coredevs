@@ -82,7 +82,9 @@ serviceMonitor:
 # Applies to the reader and writer pods.
 resources:
   requests:
-    cpu: 50m
+    # Sized so the HPA's 70%-of-request target is a sane scale-up threshold
+    # (~175m), not the twitchy ~35m a tiny request would give.
+    cpu: 250m
     memory: 96Mi
   limits:
     # Generous burst ceiling. Serving is in-memory and cheap (<100m at 1000 rps
