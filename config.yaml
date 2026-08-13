@@ -75,9 +75,10 @@ cluster:
 #   Left empty by default: the obvious candidate orgs are whole-company orgs
 #   (Consensys, OffchainLabs, ChainSafe, status-im, NethermindEth, ...) whose
 #   public membership is far broader than the client dev team — wiring them in
-#   pollutes the superset with unrelated employees. Opt an org in here only once
-#   you've confirmed its membership ~= the team. Any org can always be queried
-#   ad-hoc, without wiring, via GET /api/v1/orgs/{org}/members.
+#   pollutes the superset with unrelated employees. Opt an org in once its
+#   membership is close enough to the team, or when a deliberately wide roster
+#   beats missing developers the other sources don't list. Any org can always be
+#   queried ad-hoc, without wiring, via GET /api/v1/orgs/{org}/members.
 #
 # Candidate orgs per team are noted in comments for when you choose to opt in.
 # kind groups teams by role so consumers can filter (e.g. /api/v1/teams?kind=client):
@@ -101,7 +102,7 @@ teams:
     kind: client
     layer: cl
     protocolGuildSections: [Lighthouse]
-    githubOrgs: [] # candidate: sigp (Sigma Prime — over-includes the security arm)
+    githubOrgs: [sigp] # Sigma Prime; the whole org, security arm included
     members: [AgeManning, paulhauner] # from glamsterdam-devnets (not in Protocol Guild)
   lodestar:
     displayName: Lodestar
