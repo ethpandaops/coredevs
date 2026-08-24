@@ -14,10 +14,16 @@ import (
 	"github.com/ethpandaops/coredevs/internal/source"
 )
 
-// teamHeaderRe matches a working-group header row whose first cell is a bold
-// name followed by a "(N contributors)" annotation, e.g.
-// "| **Teku** (7 contributors) | **7** | ... |".
-var teamHeaderRe = regexp.MustCompile(`^\|\s*\*\*([^*]+?)\*\*\s*\((\d+)\s+contributors?\)`)
+// teamHeaderRe matches a working-group header row: a table row whose first cell
+// is a bold team name. The document annotates the member count in two different
+// places — inside the bold as "Teku (Consensys) - 8 Members", and after it as
+// "**Teku** (7 contributors)" — so the row is matched on the bold cell alone and
+// the count is stripped separately.
+var teamHeaderRe = regexp.MustCompile(`^\|\s*\*\*([^*]+?)\*\*[^|]*\|`)
+
+// headerCountRe matches the member-count annotation carried inside a team
+// header's bold name, e.g. the "- 8 Members" of "Teku (Consensys) - 8 Members".
+var headerCountRe = regexp.MustCompile(`\s*[-–—]\s*\d+\s+[Mm]embers?$`)
 
 // memberLinkRe matches the leading markdown link of a member row and captures
 // its target URL, e.g. "| [Sean Anderson](https://github.com/realbigsean/) | ...".
@@ -81,7 +87,9 @@ func (s *Source) Fetch(ctx context.Context) ([]source.Membership, error) {
 
 // parse walks the markdown line by line. A team-header row sets the current
 // team (when its section is mapped); subsequent member rows are attributed to
-// it until the next header. Rows under unmapped sections are skipped.
+// it until the next header. Rows under unmapped sections are skipped, and a
+// markdown heading clears the current team so rows that follow a table are
+// never attributed to the team it ended on.
 func (s *Source) parse(ctx context.Context, doc string) []source.Membership {
 	var memberships []source.Membership
 
@@ -90,8 +98,14 @@ func (s *Source) parse(ctx context.Context, doc string) []source.Membership {
 	for _, line := range strings.Split(doc, "\n") {
 		line = strings.TrimSpace(line)
 
+		if strings.HasPrefix(line, "#") {
+			currentTeam = ""
+
+			continue
+		}
+
 		if m := teamHeaderRe.FindStringSubmatch(line); m != nil {
-			section := strings.TrimSpace(m[1])
+			section := sectionName(m[1])
 			currentTeam = s.sections[section]
 			if currentTeam == "" {
 				s.logger.DebugContext(ctx, "skipping unmapped section", slog.String("section", section))
@@ -122,6 +136,13 @@ func (s *Source) parse(ctx context.Context, doc string) []source.Membership {
 	)
 
 	return memberships
+}
+
+// sectionName normalises a team header's bold cell into the section key used by
+// the team registry, dropping the member-count annotation the document appends
+// to it: "Teku (Consensys) - 8 Members" becomes "Teku (Consensys)".
+func sectionName(cell string) string {
+	return strings.TrimSpace(headerCountRe.ReplaceAllString(strings.TrimSpace(cell), ""))
 }
 
 // parseMemberRow extracts the display name and GitHub handle from a member row.

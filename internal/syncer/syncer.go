@@ -23,7 +23,7 @@ type Syncer struct {
 	sources  []source.Source
 	interval time.Duration
 	snapshot string
-	floors   map[string]int
+	floors   map[string]Floor
 	exclude  map[string]bool
 
 	mu       sync.Mutex
@@ -32,6 +32,18 @@ type Syncer struct {
 
 	done chan struct{}
 	wg   sync.WaitGroup
+}
+
+// Floor is a per-source sanity bound on a fetch. A result that falls below
+// either bound is discarded in favour of the source's last good result.
+type Floor struct {
+	// MinMembers is the fewest memberships a fetch may produce. 0 disables it.
+	MinMembers int
+	// MinTeams is the fewest distinct teams those memberships may span. 0
+	// disables it. A member count alone cannot catch an upstream restructure
+	// that still parses plenty of people but collapses them onto a handful of
+	// teams, which is what a section rename does.
+	MinTeams int
 }
 
 // SourceStatus records the outcome of the most recent fetch for a source.
@@ -49,12 +61,12 @@ type SourceStatus struct {
 }
 
 // New constructs a Syncer. snapshot is an optional path for last-good
-// persistence; an empty string disables it. floors maps a source name to a
-// minimum membership count below which a fetch is treated as a soft failure; a
-// missing or zero entry disables the floor for that source. exclude is a set of
-// lowercased handles dropped from every team before indexing — used to suppress
-// stale handles an upstream source still lists (e.g. a renamed GitHub account).
-func New(logger *slog.Logger, store *index.Store, sources []source.Source, interval time.Duration, snapshot string, floors map[string]int, exclude map[string]bool) *Syncer {
+// persistence; an empty string disables it. floors maps a source name to the
+// sanity bounds below which a fetch is treated as a soft failure; a missing
+// entry disables both bounds for that source. exclude is a set of lowercased
+// handles dropped from every team before indexing — used to suppress stale
+// handles an upstream source still lists (e.g. a renamed GitHub account).
+func New(logger *slog.Logger, store *index.Store, sources []source.Source, interval time.Duration, snapshot string, floors map[string]Floor, exclude map[string]bool) *Syncer {
 	return &Syncer{
 		logger:   logger.With(slog.String("component", "syncer")),
 		store:    store,
@@ -208,12 +220,26 @@ func (s *Syncer) fetchOne(ctx context.Context, src source.Source) (memberships [
 		return s.lastGoodFor(name), false
 	}
 
-	if floor := s.floors[name]; floor > 0 && len(memberships) < floor {
-		status.LastError = fmt.Sprintf("fetched %d members, below floor of %d — keeping last good", len(memberships), floor)
+	floor := s.floors[name]
+
+	if floor.MinMembers > 0 && len(memberships) < floor.MinMembers {
+		status.LastError = fmt.Sprintf("fetched %d members, below floor of %d — keeping last good", len(memberships), floor.MinMembers)
 		s.logger.ErrorContext(ctx, "source below member floor",
 			slog.String("source", name),
 			slog.Int("members", len(memberships)),
-			slog.Int("floor", floor),
+			slog.Int("floor", floor.MinMembers),
+		)
+
+		return s.lastGoodFor(name), false
+	}
+
+	if teams := distinctTeams(memberships); floor.MinTeams > 0 && teams < floor.MinTeams {
+		status.LastError = fmt.Sprintf("fetched %d members across %d teams, below floor of %d teams — keeping last good", len(memberships), teams, floor.MinTeams)
+		s.logger.ErrorContext(ctx, "source below team floor",
+			slog.String("source", name),
+			slog.Int("members", len(memberships)),
+			slog.Int("teams", teams),
+			slog.Int("floor", floor.MinTeams),
 		)
 
 		return s.lastGoodFor(name), false
@@ -233,6 +259,16 @@ func (s *Syncer) fetchOne(ctx context.Context, src source.Source) (memberships [
 	)
 
 	return memberships, true
+}
+
+// distinctTeams counts the teams a set of memberships spans.
+func distinctTeams(memberships []source.Membership) int {
+	seen := make(map[string]struct{}, len(memberships))
+	for _, m := range memberships {
+		seen[m.Team] = struct{}{}
+	}
+
+	return len(seen)
 }
 
 func (s *Syncer) ensureStatus(name string) *SourceStatus {

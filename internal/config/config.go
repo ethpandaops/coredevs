@@ -59,6 +59,11 @@ type ProtocolGuild struct {
 	// guarding against an upstream format change silently gutting the index. 0
 	// disables the floor.
 	MinMembers int `yaml:"minMembers"`
+	// MinTeams is a second sanity floor on how many distinct teams a fetch
+	// spans. A member count alone cannot catch a restructure that still parses
+	// plenty of people but attributes them to the wrong team, which is what
+	// happens when the document renames its section headers. 0 disables it.
+	MinTeams int `yaml:"minTeams"`
 }
 
 // GitHubOrg configures the GitHub public-org-membership source.
@@ -72,6 +77,8 @@ type GitHubOrg struct {
 	TokenEnv string `yaml:"tokenEnv"`
 	// MinMembers is a sanity floor; see ProtocolGuild.MinMembers. 0 disables it.
 	MinMembers int `yaml:"minMembers"`
+	// MinTeams is a sanity floor; see ProtocolGuild.MinTeams. 0 disables it.
+	MinTeams int `yaml:"minTeams"`
 }
 
 // Keys configures the GitHub SSH public-key cache: a rate-paced proxy that

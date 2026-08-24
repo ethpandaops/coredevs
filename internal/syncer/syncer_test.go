@@ -88,7 +88,7 @@ func TestMemberFloorRejectsDegradedFetch(t *testing.T) {
 	}
 	store := index.NewStore()
 	s := New(slog.Default(), store, []source.Source{src}, time.Hour, "",
-		map[string]int{source.NameProtocolGuild: 3}, nil)
+		map[string]Floor{source.NameProtocolGuild: {MinMembers: 3}}, nil)
 
 	require.NoError(t, s.Start(context.Background()))
 	t.Cleanup(func() { _ = s.Stop() })
@@ -107,6 +107,39 @@ func TestMemberFloorRejectsDegradedFetch(t *testing.T) {
 	}
 	s.Sync(context.Background())
 	assert.Len(t, store.Get().Members("teku", ""), 3)
+}
+
+func TestTeamFloorKeepsLastGood(t *testing.T) {
+	healthy := []source.Membership{
+		{Handle: "a", Team: "teku", Source: source.NameProtocolGuild},
+		{Handle: "b", Team: "geth", Source: source.NameProtocolGuild},
+		{Handle: "c", Team: "reth", Source: source.NameProtocolGuild},
+	}
+
+	src := &fakeSource{name: source.NameProtocolGuild, members: healthy}
+	store := index.NewStore()
+	s := New(slog.Default(), store, []source.Source{src}, time.Hour, "",
+		map[string]Floor{source.NameProtocolGuild: {MinTeams: 3}}, nil)
+
+	require.NoError(t, s.Start(context.Background()))
+	t.Cleanup(func() { _ = s.Stop() })
+
+	assert.Len(t, store.Get().Members("geth", ""), 1)
+
+	// An upstream section rename keeps the member count but funnels everyone
+	// onto one team. The member floor cannot see it; the team floor can.
+	src.members = []source.Membership{
+		{Handle: "a", Team: "teku", Source: source.NameProtocolGuild},
+		{Handle: "b", Team: "teku", Source: source.NameProtocolGuild},
+		{Handle: "c", Team: "teku", Source: source.NameProtocolGuild},
+	}
+	s.Sync(context.Background())
+
+	st := s.Statuses()
+	require.Len(t, st, 1)
+	assert.Contains(t, st[0].LastError, "below floor of 3 teams")
+	assert.Len(t, store.Get().Members("geth", ""), 1, "last good result is kept")
+	assert.Len(t, store.Get().Members("teku", ""), 1, "collapsed result is not published")
 }
 
 func TestExcludeDropsStaleHandle(t *testing.T) {

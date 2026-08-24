@@ -18,8 +18,13 @@ sources:
     url: https://raw.githubusercontent.com/protocolguild/documentation/main/docs/01-membership.md
     # Sanity floor: if a parse yields fewer than this many members (e.g. the
     # upstream markdown format changed), keep the last good result instead of
-    # publishing a gutted index. The document currently has ~250 members.
+    # publishing a gutted index. The document currently has ~190 members.
     minMembers: 50
+    # Second sanity floor, on how many distinct teams the parse spans. A member
+    # count alone cannot catch a section rename, which keeps the total healthy
+    # while collapsing everyone onto whichever few headers still match. The
+    # registry currently maps 23 sections.
+    minTeams: 15
   githubOrg:
     enabled: true
     baseURL: https://api.github.com
@@ -69,7 +74,9 @@ cluster:
 
 # Canonical team registry.
 #
-# protocolGuildSections: working-group headers in the Protocol Guild document.
+# protocolGuildSections: team headers in the Protocol Guild document, written
+#   exactly as they appear there minus the "- N Members" suffix the document
+#   appends to each one (e.g. "Teku (Consensys)", "Lighthouse (Sigma Prime)").
 #   This is the precise per-client signal and the default basis for the superset.
 # githubOrgs: orgs whose PUBLIC members are folded into this team's superset.
 #   Left empty by default: the obvious candidate orgs are whole-company orgs
@@ -101,35 +108,35 @@ teams:
     displayName: Lighthouse
     kind: client
     layer: cl
-    protocolGuildSections: [Lighthouse]
+    protocolGuildSections: [Lighthouse (Sigma Prime)]
     githubOrgs: [sigp] # Sigma Prime; the whole org, security arm included
     members: [AgeManning, paulhauner] # from glamsterdam-devnets (not in Protocol Guild)
   lodestar:
     displayName: Lodestar
     kind: client
     layer: cl
-    protocolGuildSections: [Lodestar]
+    protocolGuildSections: [Lodestar (Chainsafe)]
     githubOrgs: [] # candidate: ChainSafe (multi-product company org)
     members: [g11tech, philknows] # from glamsterdam-devnets (not in Protocol Guild)
   nimbus:
     displayName: Nimbus
     kind: client
     layer: cl
-    protocolGuildSections: [Nimbus]
+    protocolGuildSections: [Nimbus Consensus (IFT), Nimbus Execution (IFT)]
     githubOrgs: [] # candidate: status-im (multi-product company org)
     members: [Tomi-3-0, ahshum, chirag-parmar, zah] # from glamsterdam-devnets (not in Protocol Guild)
   prysm:
     displayName: Prysm
     kind: client
     layer: cl
-    protocolGuildSections: [Prysm]
+    protocolGuildSections: [Prysm (Offchain Labs)]
     githubOrgs: [] # candidate: OffchainLabs (also Arbitrum — broad)
     members: [nisdas, rkapka] # from glamsterdam-devnets (not in Protocol Guild)
   teku:
     displayName: Teku
     kind: client
     layer: cl
-    protocolGuildSections: [Teku]
+    protocolGuildSections: [Teku (Consensys)]
     githubOrgs: [] # candidate: Consensys (whole-company org — broad)
     members: [] # Add manual github users here
 
@@ -138,7 +145,7 @@ teams:
     displayName: Besu
     kind: client
     layer: el
-    protocolGuildSections: [Hyperledger Besu, Besu]
+    protocolGuildSections: [Hyperledger Besu (Consensys)]
     githubOrgs: [] # candidate: hyperledger (multi-project foundation org)
     members: [joshuafernandes] # from glamsterdam-devnets (not in Protocol Guild)
   erigon:
@@ -153,7 +160,7 @@ teams:
     displayName: Geth
     kind: client
     layer: el
-    protocolGuildSections: [Geth]
+    protocolGuildSections: [Geth (EF)]
     # No org wired: geth has no dedicated org; the `ethereum` org is the EF
     githubOrgs: []
     members: [] # Add manual github users here
@@ -168,7 +175,7 @@ teams:
     displayName: Reth
     kind: client
     layer: el
-    protocolGuildSections: [Reth]
+    protocolGuildSections: [Reth (Paradigm)]
     githubOrgs: [] # candidate: paradigmxyz (multi-project org)
     members: [emmajam, gakonst, jenpaff, onbjerg, rkrasiuk] # from glamsterdam-devnets (not in Protocol Guild)
   ethrex:
@@ -184,27 +191,27 @@ teams:
   cryptography-research:
     displayName: Cryptography Research
     kind: research
-    protocolGuildSections: [Cryptography Research]
+    protocolGuildSections: [Cryptography (EF)]
     members: [] # Add manual github users here
   p2p-networking:
     displayName: P2P Networking
     kind: research
-    protocolGuildSections: [P2P Networking]
+    protocolGuildSections: [Networking (EF)]
     members: [] # Add manual github users here
   protocol-architecture:
     displayName: Protocol Architecture
     kind: research
-    protocolGuildSections: [Protocol Architecture]
+    protocolGuildSections: [Architecture (EF)]
     members: [] # Add manual github users here
   protocol-consensus:
     displayName: Protocol Consensus
     kind: research
-    protocolGuildSections: [Protocol Consensus]
+    protocolGuildSections: [Finality (EF)]
     members: [] # Add manual github users here
   protocol-prototyping:
     displayName: Protocol Prototyping
     kind: research
-    protocolGuildSections: [Protocol Prototyping]
+    protocolGuildSections: [] # no counterpart in the document
     members: [] # Add manual github users here
   rig:
     displayName: Robust Incentive Group (RIG)
@@ -214,12 +221,12 @@ teams:
   stateless-consensus:
     displayName: Stateless Consensus
     kind: research
-    protocolGuildSections: [Stateless Consensus]
+    protocolGuildSections: [Stateless (EF)]
     members: [] # Add manual github users here
   zkevm:
     displayName: zkEVM
     kind: research
-    protocolGuildSections: [zkEVM]
+    protocolGuildSections: [zkEVM (EF)]
     members: [] # Add manual github users here
 
   # --- Spec coordination (Protocol Guild "Governance") ---
@@ -227,41 +234,56 @@ teams:
     displayName: Execution Layer Specs + Coordination
     kind: coordination
     layer: el
-    protocolGuildSections: [Execution Layer Specs + Coordination]
+    protocolGuildSections: [Execution Coordination]
     members: [] # Add manual github users here
   cl-specs:
     displayName: Consensus Layer Specs + Coordination
     kind: coordination
     layer: cl
-    protocolGuildSections: [Consensus Layer Specs + Coordination]
+    protocolGuildSections: [Consensus Coordination]
+    members: [] # Add manual github users here
+  specs:
+    displayName: Protocol Specs
+    kind: coordination
+    # The document keeps one combined specs group rather than splitting it by
+    # layer, so this holds both the consensus-specs and execution-specs work.
+    protocolGuildSections: [Specs (EF)]
     members: [] # Add manual github users here
 
   # --- Upgrade delivery (Protocol Guild "Upgrade Delivery") ---
   devnets:
     displayName: Dev/Testnets
     kind: delivery
-    protocolGuildSections: [Dev/Testnets]
+    protocolGuildSections: [] # no counterpart in the document
     members: [] # Add manual github users here
   testing:
     displayName: Testing
     kind: delivery
-    protocolGuildSections: [Testing]
+    protocolGuildSections: [] # no counterpart in the document
     members: [] # Add manual github users here
   ethereumjs:
     displayName: EthereumJS
     kind: delivery
-    protocolGuildSections: [EthereumJS]
+    protocolGuildSections: [] # no counterpart in the document
     members: [] # Add manual github users here
   security:
     displayName: Security
     kind: delivery
-    protocolGuildSections: [Security]
+    protocolGuildSections: [Security (EF)]
     members: [] # Add manual github users here
   pg-operations:
     displayName: Funding + PG Operations
     kind: delivery
-    protocolGuildSections: [Funding + PG Operations]
+    protocolGuildSections: [Protocol Guild Ops]
     members: [] # Add manual github users here
+
+  # Sections present in the Protocol Guild document that no team claims:
+  #   Devops (EF)                 — the same seven people as the ethpandaops team below
+  #   Ethereum Cat Herders        — one member; no team models EIP herding
+  #   TXRX (Consensys)            — consensus research; no team models it
+  #   Independent / Uncategorized — appears twice, under two different tables
+  # Claim one by adding its exact header (minus the "- N Members" suffix) to a
+  # team's protocolGuildSections.
 
   # --- ethPandaOps (not in Protocol Guild; sourced from the org) ---
   ethpandaops:

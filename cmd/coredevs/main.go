@@ -157,9 +157,15 @@ func run(ctx context.Context, configPath, roleOverride string) error {
 func startSyncing(ctx context.Context, logger *slog.Logger, cfg *config.Config, httpClient *http.Client, indexStore *index.Store, cleanups *[]func()) (api.KeyProvider, api.StatusFunc, api.OrgResolver, error) {
 	sources, orgClient := buildSources(logger, cfg, httpClient)
 
-	floors := map[string]int{
-		source.NameProtocolGuild: cfg.Sources.ProtocolGuild.MinMembers,
-		source.NameGitHubOrg:     cfg.Sources.GitHubOrg.MinMembers,
+	floors := map[string]syncer.Floor{
+		source.NameProtocolGuild: {
+			MinMembers: cfg.Sources.ProtocolGuild.MinMembers,
+			MinTeams:   cfg.Sources.ProtocolGuild.MinTeams,
+		},
+		source.NameGitHubOrg: {
+			MinMembers: cfg.Sources.GitHubOrg.MinMembers,
+			MinTeams:   cfg.Sources.GitHubOrg.MinTeams,
+		},
 	}
 
 	sync := syncer.New(logger, indexStore, sources, cfg.SyncInterval, cfg.SnapshotPath, floors, cfg.ExcludedHandles())

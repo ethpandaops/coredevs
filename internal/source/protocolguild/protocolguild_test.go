@@ -14,35 +14,51 @@ import (
 )
 
 const sampleDoc = `
-## CLIENT IMPLEMENTATIONS
+## 1.1 Active Members
 
-| **CONSENSUS CLIENTS** | Weight | Contributions |
+### Client Development
+
+#### Consensus Clients
+
+| **Team** | Weight | Contributions |
 |:---|:---|:---|
-| **Lighthouse** (3 contributors) | **3** | [sigp/lighthouse](https://github.com/sigp/lighthouse) |
+| **Lighthouse (Sigma Prime) - 3 Members** | **3** | [sigp/lighthouse](https://github.com/sigp/lighthouse) |
 | [Sean Anderson](https://github.com/realbigsean/) | 0.5 | [sigp/lighthouse](https://github.com/sigp/lighthouse) |
 | [Jimmy Chen](https://github.com/jimmygchen) | 1 | [sigp/lighthouse](https://github.com/sigp/lighthouse) |
 | [Someone Web](https://example.com/me) | 1 | |
-| **Teku** (2 contributors) | **2** | [ConsenSys/teku](https://github.com/ConsenSys/teku) |
+| **Teku (Consensys) - 2 Members** | **2** | [ConsenSys/teku](https://github.com/ConsenSys/teku) |
 | [Paul Harris](https://github.com/rolfyone/) | 1 | [Consensys/teku](https://github.com/Consensys/teku) |
 | [Stefan Bratanov](https://github.com/StefanBratanov/) | 1 | [Consensys/teku](https://github.com/Consensys/teku) |
 
-| **EXECUTION CLIENTS** | Weight | Contributions |
+#### Execution Clients
+
+| **Team** | Weight | Contributions |
 |:---|:---|:---|
-| **Reth** (1 contributors) | **1** | [paradigmxyz/reth](https://github.com/paradigmxyz/reth) |
+| **Reth (Paradigm) - 1 Member** | **1** | [paradigmxyz/reth](https://github.com/paradigmxyz/reth) |
 | [joshieDo]([https://github.com/fgimenez](http://github.com/joshieDo)) | 0.5 | [paradigmxyz/reth](https://github.com/paradigmxyz/reth) |
-| **Unmapped Client** (1 contributors) | **1** | |
+| **Unmapped Client - 1 Member** | **1** | |
 | [Nobody](https://github.com/nobody) | 1 | |
 
-## GOVERNANCE
+### Upgrade + Maintenance Support
+
+| **Team** | **Weight** | **Contributions** |
+|:---|:---|:---|
+| **Execution Coordination** (1 contributors) | **1** | |
+| [Nixo](https://github.com/nixorokish/) | 1 | |
 | **EIPs** (1 contributors) | **1** | |
 | [Editor](https://github.com/editor) | 1 | |
+
+## 1.2 Alumni Members
+
+| [Former Member](https://github.com/formermember) | 1 | |
 `
 
 func TestParse(t *testing.T) {
 	sections := map[string]string{
-		"Lighthouse": "lighthouse",
-		"Teku":       "teku",
-		"Reth":       "reth",
+		"Lighthouse (Sigma Prime)": "lighthouse",
+		"Teku (Consensys)":         "teku",
+		"Reth (Paradigm)":          "reth",
+		"Execution Coordination":   "el-specs",
 	}
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -66,10 +82,33 @@ func TestParse(t *testing.T) {
 	assert.ElementsMatch(t, []string{"rolfyone", "StefanBratanov"}, byTeam["teku"])
 	assert.ElementsMatch(t, []string{"joshieDo"}, byTeam["reth"],
 		"last github.com/<user> in a malformed nested link wins")
+	assert.ElementsMatch(t, []string{"nixorokish"}, byTeam["el-specs"],
+		"the older \"(N contributors)\" header form is still recognised")
 
 	for _, m := range got {
 		assert.NotEqual(t, "nobody", m.Handle, "unmapped client section must be skipped")
 		assert.NotEqual(t, "editor", m.Handle, "non-client section must be skipped")
+		assert.NotEqual(t, "formermember", m.Handle, "a heading ends the preceding table")
+	}
+}
+
+func TestSectionName(t *testing.T) {
+	tests := []struct {
+		name string
+		cell string
+		want string
+	}{
+		{"members suffix", "Teku (Consensys) - 8 Members", "Teku (Consensys)"},
+		{"singular member suffix", "Ethereum Cat Herders - 1 Member", "Ethereum Cat Herders"},
+		{"en dash", "Nethermind – 17 Members", "Nethermind"},
+		{"no suffix", "Robust Incentive Group (RIG)", "Robust Incentive Group (RIG)"},
+		{"digits in name kept", "zkEVM (EF) - 5 Members", "zkEVM (EF)"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, sectionName(tt.cell))
+		})
 	}
 }
 
@@ -85,7 +124,8 @@ func TestParseMemberRow(t *testing.T) {
 		{"malformed nested", "| [A]([https://github.com/x](http://github.com/joshieDo)) | 1 | |", "joshieDo", true},
 		{"personal site", "| [A](https://example.com/me) | 1 | |", "", false},
 		{"repo link not user", "| [A](https://github.com/org/repo) | 1 | |", "", false},
-		{"team header", "| **Teku** (7 contributors) | **7** | |", "", false},
+		{"team header", "| **Teku (Consensys) - 8 Members** | **8** | |", "", false},
+		{"legacy team header", "| **Teku** (7 contributors) | **7** | |", "", false},
 		{"divider", "| **CONSENSUS CLIENTS** | Weight | Contributions |", "", false},
 	}
 
