@@ -16,3 +16,6 @@ keel:
 ingress:
   enabled: true
   host: coredevs.analytics.staging.platform.ethpandaops.io
+
+prometheusRule:
+  enabled: false

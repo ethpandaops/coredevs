@@ -9,7 +9,9 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"sort"
 	"strings"
+	"sync"
 
 	"github.com/ethpandaops/coredevs/internal/source"
 )
@@ -36,23 +38,49 @@ var githubUserRe = regexp.MustCompile(`github\.com/([A-Za-z0-9-]+)/?$`)
 
 // Source parses the Protocol Guild membership markdown.
 type Source struct {
-	logger   *slog.Logger
-	client   *http.Client
-	url      string
-	sections map[string]string
+	logger     *slog.Logger
+	client     *http.Client
+	url        string
+	sections   map[string]string
+	maxMissing int
+
+	mu      sync.RWMutex
+	missing []string
 }
 
 var _ source.Source = (*Source)(nil)
 
 // New constructs a Protocol Guild source. sections maps Protocol Guild section
-// headers (as they appear in the document) to canonical team slugs.
-func New(logger *slog.Logger, client *http.Client, url string, sections map[string]string) *Source {
+// headers (as they appear in the document) to canonical team slugs. maxMissing
+// is how many of those headers may vanish from the document before a fetch is
+// treated as a failure; 0 tolerates any number.
+func New(logger *slog.Logger, client *http.Client, url string, sections map[string]string, maxMissing int) *Source {
 	return &Source{
-		logger:   logger.With(slog.String("source", source.NameProtocolGuild)),
-		client:   client,
-		url:      url,
-		sections: sections,
+		logger:     logger.With(slog.String("source", source.NameProtocolGuild)),
+		client:     client,
+		url:        url,
+		sections:   sections,
+		maxMissing: maxMissing,
 	}
+}
+
+// Warnings returns the configured section headers that were absent from the
+// most recent document, empty when every one of them was found. A header goes
+// missing when the document renames or drops it, which silently strands every
+// member underneath it, so it is reported even when the fetch itself succeeded.
+func (s *Source) Warnings() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return append([]string(nil), s.missing...)
+}
+
+// setMissing records the configured headers absent from a parse.
+func (s *Source) setMissing(missing []string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.missing = missing
 }
 
 // Name returns the source identifier.
@@ -82,7 +110,43 @@ func (s *Source) Fetch(ctx context.Context) ([]source.Membership, error) {
 		return nil, fmt.Errorf("read membership document: %w", err)
 	}
 
-	return s.parse(ctx, string(body)), nil
+	memberships, seen := s.parse(ctx, string(body))
+
+	missing := s.missingSections(seen)
+	s.setMissing(missing)
+
+	if len(missing) > 0 {
+		s.logger.ErrorContext(ctx, "configured sections missing from document",
+			slog.Int("missing", len(missing)),
+			slog.Int("configured", len(s.sections)),
+			slog.Any("sections", missing),
+		)
+
+		if s.maxMissing > 0 && len(missing) > s.maxMissing {
+			return nil, fmt.Errorf(
+				"%d of %d configured sections missing from document (budget %d): %s",
+				len(missing), len(s.sections), s.maxMissing, strings.Join(missing, ", "),
+			)
+		}
+	}
+
+	return memberships, nil
+}
+
+// missingSections returns the configured headers that the document no longer
+// carries, sorted for a stable error message.
+func (s *Source) missingSections(seen map[string]bool) []string {
+	var missing []string
+
+	for section := range s.sections {
+		if !seen[section] {
+			missing = append(missing, section)
+		}
+	}
+
+	sort.Strings(missing)
+
+	return missing
 }
 
 // parse walks the markdown line by line. A team-header row sets the current
@@ -90,8 +154,12 @@ func (s *Source) Fetch(ctx context.Context) ([]source.Membership, error) {
 // it until the next header. Rows under unmapped sections are skipped, and a
 // markdown heading clears the current team so rows that follow a table are
 // never attributed to the team it ended on.
-func (s *Source) parse(ctx context.Context, doc string) []source.Membership {
-	var memberships []source.Membership
+//
+// seen collects every section header the document carried, mapped or not, so
+// the caller can tell a header that vanished from one that simply has no
+// members.
+func (s *Source) parse(ctx context.Context, doc string) (memberships []source.Membership, seen map[string]bool) {
+	seen = make(map[string]bool)
 
 	currentTeam := ""
 
@@ -106,6 +174,7 @@ func (s *Source) parse(ctx context.Context, doc string) []source.Membership {
 
 		if m := teamHeaderRe.FindStringSubmatch(line); m != nil {
 			section := sectionName(m[1])
+			seen[section] = true
 			currentTeam = s.sections[section]
 			if currentTeam == "" {
 				s.logger.DebugContext(ctx, "skipping unmapped section", slog.String("section", section))
@@ -133,9 +202,10 @@ func (s *Source) parse(ctx context.Context, doc string) []source.Membership {
 
 	s.logger.DebugContext(ctx, "parsed membership document",
 		slog.Int("memberships", len(memberships)),
+		slog.Int("sections", len(seen)),
 	)
 
-	return memberships
+	return memberships, seen
 }
 
 // sectionName normalises a team header's bold cell into the section key used by

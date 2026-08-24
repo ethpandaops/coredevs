@@ -127,6 +127,31 @@ func (p *publisher) publish(ctx context.Context) {
 	)
 }
 
+// loadPublishedIndex reads the index out of the last published snapshot. The
+// writer uses it to recover a starting point after a restart: its own disk is
+// ephemeral, so this is the only surviving record of the last healthy state.
+func loadPublishedIndex(ctx context.Context, logger *slog.Logger, st *store.Store) *index.Index {
+	snap, ok, err := st.Load(ctx)
+	if err != nil {
+		logger.WarnContext(ctx, "failed to load published snapshot", slog.Any("error", err))
+
+		return nil
+	}
+
+	if !ok {
+		return nil
+	}
+
+	parsed, err := snapshot.Unmarshal(snap.Data)
+	if err != nil {
+		logger.WarnContext(ctx, "failed to parse published snapshot", slog.Any("error", err))
+
+		return nil
+	}
+
+	return parsed.Index
+}
+
 // poller loads the published snapshot from the shared store into the serving
 // structures on every reader pod, so all readers serve identical data.
 type poller struct {

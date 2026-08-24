@@ -66,7 +66,7 @@ func TestParse(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s := New(slog.Default(), srv.Client(), srv.URL, sections)
+	s := New(slog.Default(), srv.Client(), srv.URL, sections, 0)
 
 	got, err := s.Fetch(context.Background())
 	require.NoError(t, err)
@@ -136,4 +136,46 @@ func TestParseMemberRow(t *testing.T) {
 			assert.Equal(t, tt.wantHandle, handle)
 		})
 	}
+}
+
+func TestMissingSectionsReported(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(sampleDoc))
+	}))
+	defer srv.Close()
+
+	// "Teku" without its "(Consensys)" suffix is what a rename looks like: the
+	// header is gone from the document even though the members are still there.
+	sections := map[string]string{
+		"Lighthouse (Sigma Prime)": "lighthouse",
+		"Teku":                     "teku",
+		"Geth (EF)":                "geth",
+	}
+
+	t.Run("within budget", func(t *testing.T) {
+		s := New(slog.Default(), srv.Client(), srv.URL, sections, 2)
+
+		got, err := s.Fetch(context.Background())
+		require.NoError(t, err)
+		assert.NotEmpty(t, got, "sections that do still match are returned")
+		assert.Equal(t, []string{"Geth (EF)", "Teku"}, s.Warnings())
+	})
+
+	t.Run("over budget", func(t *testing.T) {
+		s := New(slog.Default(), srv.Client(), srv.URL, sections, 1)
+
+		_, err := s.Fetch(context.Background())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "2 of 3 configured sections missing")
+		assert.Contains(t, err.Error(), "Teku")
+	})
+
+	t.Run("all present", func(t *testing.T) {
+		s := New(slog.Default(), srv.Client(), srv.URL,
+			map[string]string{"Lighthouse (Sigma Prime)": "lighthouse"}, 1)
+
+		_, err := s.Fetch(context.Background())
+		require.NoError(t, err)
+		assert.Empty(t, s.Warnings())
+	})
 }

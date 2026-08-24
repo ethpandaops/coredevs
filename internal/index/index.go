@@ -116,6 +116,35 @@ func (s *Store) Set(idx *Index) {
 	s.current.Store(idx)
 }
 
+// Memberships flattens the index back into the membership rows that built it,
+// so a process restarting from a snapshot can restore each source's last good
+// result rather than starting with nothing to fall back on.
+func (i *Index) Memberships() []source.Membership {
+	var out []source.Membership
+
+	for _, slug := range i.TeamSlugs() {
+		for _, m := range i.Members(slug, "") {
+			for _, src := range m.Sources {
+				if src == source.NameGitHubOrg && len(m.Orgs) > 0 {
+					for _, org := range m.Orgs {
+						out = append(out, source.Membership{
+							Handle: m.Handle, Name: m.Name, Team: slug, Source: src, Org: org,
+						})
+					}
+
+					continue
+				}
+
+				out = append(out, source.Membership{
+					Handle: m.Handle, Name: m.Name, Team: slug, Source: src,
+				})
+			}
+		}
+	}
+
+	return out
+}
+
 // TeamSlugs returns the team slugs present in the index, sorted.
 func (i *Index) TeamSlugs() []string {
 	slugs := make([]string, 0, len(i.Teams))

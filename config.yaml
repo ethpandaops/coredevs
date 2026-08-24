@@ -25,6 +25,12 @@ sources:
     # while collapsing everyone onto whichever few headers still match. The
     # registry currently maps 23 sections.
     minTeams: 15
+    # How many configured protocolGuildSections may be absent from the document
+    # before the fetch is rejected. A header that disappears strands everyone
+    # under it, so this catches an upstream rename directly instead of inferring
+    # it from the counts afterwards. Missing headers are always logged and
+    # exported as coredevs_source_warnings, whether or not they trip this.
+    maxMissingSections: 3
   githubOrg:
     enabled: true
     baseURL: https://api.github.com

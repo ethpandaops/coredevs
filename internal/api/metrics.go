@@ -16,6 +16,8 @@ type collector struct {
 	teamMembers    *prometheus.Desc
 	indexGenerated *prometheus.Desc
 	sourceMembers  *prometheus.Desc
+	sourceTeams    *prometheus.Desc
+	sourceWarnings *prometheus.Desc
 	sourceSuccess  *prometheus.Desc
 	keysHandles    *prometheus.Desc
 	keysCached     *prometheus.Desc
@@ -43,6 +45,16 @@ func newCollector(store *index.Store, statuses StatusFunc, keyProvider KeyProvid
 		sourceMembers: prometheus.NewDesc(
 			"coredevs_source_members",
 			"Membership count from a source's last successful fetch.",
+			[]string{"source"}, nil,
+		),
+		sourceTeams: prometheus.NewDesc(
+			"coredevs_source_teams",
+			"Number of distinct teams in a source's last successful fetch.",
+			[]string{"source"}, nil,
+		),
+		sourceWarnings: prometheus.NewDesc(
+			"coredevs_source_warnings",
+			"Number of non-fatal problems a source reported about its last fetch, such as a configured upstream section that no longer exists.",
 			[]string{"source"}, nil,
 		),
 		sourceSuccess: prometheus.NewDesc(
@@ -78,6 +90,8 @@ func (c *collector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.teamMembers
 	ch <- c.indexGenerated
 	ch <- c.sourceMembers
+	ch <- c.sourceTeams
+	ch <- c.sourceWarnings
 	ch <- c.sourceSuccess
 	ch <- c.keysHandles
 	ch <- c.keysCached
@@ -104,6 +118,14 @@ func (c *collector) Collect(ch chan<- prometheus.Metric) {
 	for _, st := range c.statuses() {
 		ch <- prometheus.MustNewConstMetric(
 			c.sourceMembers, prometheus.GaugeValue, float64(st.Members), st.Name,
+		)
+
+		ch <- prometheus.MustNewConstMetric(
+			c.sourceTeams, prometheus.GaugeValue, float64(st.Teams), st.Name,
+		)
+
+		ch <- prometheus.MustNewConstMetric(
+			c.sourceWarnings, prometheus.GaugeValue, float64(len(st.Warnings)), st.Name,
 		)
 
 		if !st.LastSuccess.IsZero() {

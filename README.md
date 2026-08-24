@@ -18,9 +18,40 @@ endpoint that refreshes itself.
 | `manual` | Static handles listed per team in config (`members:`). For people who belong to a team but aren't yet in an upstream source — e.g. a new joiner before they're added to Protocol Guild. Always included; not subject to rate limits or the member floor. |
 
 Sources refresh every `syncInterval` (default 3h). The last good result of each
-source is kept in memory, so a transient upstream outage never drops a team. The
-built index is persisted to `snapshotPath` and reloaded on restart, so the
-service serves last-known-good data immediately on boot.
+source is kept in memory, so a transient upstream outage never drops a team.
+
+That state also survives a restart. A standalone pod reloads it from
+`snapshotPath`; a writer pod, whose disk is ephemeral, reloads it from the
+snapshot it last published to Postgres. Either way the index is restored *and*
+each source's last good result with it — so a pod that restarts while an
+upstream is broken still has a fallback to serve, and keeps publishing updates
+from the sources that are healthy instead of freezing.
+
+## Guarding against upstream drift
+
+The Protocol Guild source parses a markdown document whose structure is not an
+API. When that structure changes, the failure is quiet: members still parse, but
+they land on the wrong team or none at all. Four checks bound that.
+
+| Check | Config | Effect |
+| --- | --- | --- |
+| Member floor | `minMembers` | A fetch parsing fewer members than this is rejected. |
+| Team floor | `minTeams` | A fetch spanning fewer teams than this is rejected — catches a rename that keeps the member count healthy while collapsing everyone onto a handful of sections. |
+| Missing sections | `maxMissingSections` | Configured `protocolGuildSections` absent from the document are always reported via `GET /api/v1/sources` and `coredevs_source_warnings`; past this budget the fetch is rejected. |
+| Starvation | — | A sync where any source failed with no last good result to stand in for it is neither served nor persisted, so a broken upstream cannot erase the good state that readers are being served. |
+
+A rejected fetch keeps the last good result, so the API stays up while the index
+stops moving. `coredevs_source_last_success_timestamp_seconds` is what tells you
+that is happening.
+
+The `upstream` workflow parses the live document against the committed registry
+on a daily schedule, and on any PR touching `config.yaml` or the parser, so a
+rename surfaces as a failing check rather than as a skewed dashboard. Run it
+locally with:
+
+```sh
+go test -tags upstream ./internal/source/protocolguild/
+```
 
 ## Superset semantics & the org caveat
 
@@ -52,7 +83,7 @@ just the client teams.
 | `GET /api/v1/handles/{handle}` | Reverse lookup: every team a handle appears on. |
 | `GET /api/v1/handles/{handle}/keys` | A single developer's cached SSH public keys. |
 | `GET /api/v1/orgs/{org}/members` | Public members of an arbitrary GitHub org, on demand. |
-| `GET /api/v1/sources` | Per-source sync status (last attempt/success/error) plus key-cache status. |
+| `GET /api/v1/sources` | Per-source sync status (last attempt/success/error, team count, warnings) plus key-cache status. |
 | `GET /api/v1/export` | The full index as JSON. |
 | `GET /healthz` | Liveness. |
 | `GET /readyz` | Readiness — 503 until the first index is available. |

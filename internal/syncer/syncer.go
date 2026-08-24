@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -58,6 +59,19 @@ type SourceStatus struct {
 	LastError string `json:"lastError,omitempty"`
 	// Members is the membership count from the last successful fetch.
 	Members int `json:"members"`
+	// Teams is the number of distinct teams that fetch spanned.
+	Teams int `json:"teams"`
+	// Warnings are non-fatal problems the source reported about its most recent
+	// fetch, such as an upstream section that no longer exists.
+	Warnings []string `json:"warnings,omitempty"`
+}
+
+// Reporter is implemented by a source that can report non-fatal problems with
+// its most recent fetch. A source that parses an upstream document uses this to
+// flag structure it expected and did not find, which is a break in the making
+// even while the fetch still returns plenty of data.
+type Reporter interface {
+	Warnings() []string
 }
 
 // New constructs a Syncer. snapshot is an optional path for last-good
@@ -97,6 +111,7 @@ func (s *Syncer) Start(ctx context.Context) error {
 			slog.Int("teams", len(snap.Teams)),
 		)
 		s.store.Set(snap)
+		s.restoreLastGood(ctx, snap)
 	}
 
 	s.Sync(ctx)
@@ -105,6 +120,46 @@ func (s *Syncer) Start(ctx context.Context) error {
 	go s.loop(ctx)
 
 	return nil
+}
+
+// restoreLastGood seeds each source's fallback from a snapshot, so a process
+// that restarts while an upstream is broken still has that upstream's last good
+// result to serve. Without it the first degraded fetch after a restart has
+// nothing to fall back on and publishes an index missing that source entirely.
+func (s *Syncer) restoreLastGood(ctx context.Context, snap *index.Index) {
+	bySource := make(map[string][]source.Membership)
+	for _, m := range snap.Memberships() {
+		bySource[m.Source] = append(bySource[m.Source], m)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for name, memberships := range bySource {
+		s.lastGood[name] = memberships
+		s.logger.InfoContext(ctx, "restored last good result from snapshot",
+			slog.String("source", name),
+			slog.Int("members", len(memberships)),
+		)
+	}
+}
+
+// Seed publishes an index the syncer did not fetch and restores each source's
+// last good result from it. A writer pod whose disk is ephemeral calls this with
+// the snapshot the cluster already published, so a restart begins from the last
+// healthy state instead of from nothing. Call it before Start.
+func (s *Syncer) Seed(ctx context.Context, idx *index.Index) {
+	if idx == nil || len(idx.Teams) == 0 {
+		return
+	}
+
+	s.logger.InfoContext(ctx, "seeding index from published snapshot",
+		slog.Time("generatedAt", idx.GeneratedAt),
+		slog.Int("teams", len(idx.Teams)),
+	)
+
+	s.store.Set(idx)
+	s.restoreLastGood(ctx, idx)
 }
 
 // Stop halts the refresh loop and waits for it to exit.
@@ -137,6 +192,7 @@ func (s *Syncer) Sync(ctx context.Context) *index.Index {
 		all      []source.Membership
 		wg       sync.WaitGroup
 		anyFresh bool
+		starved  []string
 	)
 
 	for _, src := range s.sources {
@@ -149,11 +205,16 @@ func (s *Syncer) Sync(ctx context.Context) *index.Index {
 			mu.Lock()
 			all = append(all, memberships...)
 			anyFresh = anyFresh || fresh
+			if !fresh && len(memberships) == 0 {
+				starved = append(starved, src.Name())
+			}
 			mu.Unlock()
 		}(src)
 	}
 
 	wg.Wait()
+
+	sort.Strings(starved)
 
 	if len(s.exclude) > 0 {
 		kept := all[:0]
@@ -168,13 +229,28 @@ func (s *Syncer) Sync(ctx context.Context) *index.Index {
 
 	idx := index.Build(time.Now().UTC(), all)
 
+	// A starved source failed and had no last good result to stand in for it, so
+	// this index is missing everything that source contributes. Keep serving
+	// what is already published rather than replacing it with a partial view,
+	// and never let a partial view reach disk — the snapshot is what a restart
+	// rebuilds from, so overwriting it turns a transient upstream break into a
+	// permanent one.
+	if len(starved) > 0 && s.store.Get() != nil {
+		s.logger.ErrorContext(ctx, "skipping publish, sources contributed nothing",
+			slog.Any("sources", starved),
+			slog.Int("teams", len(idx.Teams)),
+		)
+
+		return idx
+	}
+
 	// Never replace a populated index with an empty one — an all-sources-fail
 	// tick must not wipe last-good data already being served.
 	if len(idx.Teams) > 0 || s.store.Get() == nil {
 		s.store.Set(idx)
 	}
 
-	if anyFresh && len(idx.Teams) > 0 {
+	if anyFresh && len(idx.Teams) > 0 && len(starved) == 0 {
 		if err := index.Save(idx, s.snapshot); err != nil {
 			s.logger.WarnContext(ctx, "failed to save snapshot", slog.Any("error", err))
 		}
@@ -210,6 +286,12 @@ func (s *Syncer) fetchOne(ctx context.Context, src source.Source) (memberships [
 	status.LastAttempt = time.Now().UTC()
 
 	memberships, err := src.Fetch(ctx)
+
+	// Recorded before the error check: a source reports what it found wrong with
+	// the document whether or not it then rejected the fetch, and the rejected
+	// case is the one worth alerting on.
+	status.Warnings = sourceWarnings(src)
+
 	if err != nil {
 		status.LastError = err.Error()
 		s.logger.ErrorContext(ctx, "source fetch failed",
@@ -248,6 +330,7 @@ func (s *Syncer) fetchOne(ctx context.Context, src source.Source) (memberships [
 	status.LastError = ""
 	status.LastSuccess = time.Now().UTC()
 	status.Members = len(memberships)
+	status.Teams = distinctTeams(memberships)
 
 	s.mu.Lock()
 	s.lastGood[name] = memberships
@@ -259,6 +342,17 @@ func (s *Syncer) fetchOne(ctx context.Context, src source.Source) (memberships [
 	)
 
 	return memberships, true
+}
+
+// sourceWarnings collects the non-fatal problems a source reports, if it
+// reports any at all.
+func sourceWarnings(src source.Source) []string {
+	r, ok := src.(Reporter)
+	if !ok {
+		return nil
+	}
+
+	return r.Warnings()
 }
 
 // distinctTeams counts the teams a set of memberships spans.

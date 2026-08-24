@@ -1,0 +1,61 @@
+{{- if .Values.prometheusRule.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "coredevs.fullname" . }}
+  labels:
+    {{- include "coredevs.labels" . | nindent 4 }}
+spec:
+  groups:
+    - name: coredevs
+      rules:
+        # The team registry maps a fixed set of Protocol Guild section headers.
+        # A header that disappears strands every member under it, so this fires
+        # while the member totals still look healthy.
+        - alert: CoredevsUpstreamSectionsMissing
+          expr: coredevs_source_warnings > 0
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: coredevs {{`{{ $labels.source }}`}} is missing configured upstream sections
+            description: >-
+              {{`{{ $value }}`}} configured section headers are absent from the upstream document.
+              Members under them are unattributed. Reconcile config.yaml with the document;
+              GET /api/v1/sources names the missing headers.
+
+        # The invariant that a section rename breaks: members keep parsing, but
+        # they collapse onto whichever few headers still match.
+        - alert: CoredevsSourceTeamsCollapsed
+          expr: coredevs_source_teams{source="protocol-guild"} < {{ .Values.prometheusRule.minTeams }}
+          for: 30m
+          labels:
+            severity: critical
+          annotations:
+            summary: coredevs protocol-guild source collapsed onto {{`{{ $value }}`}} teams
+            description: >-
+              The Protocol Guild source normally spans {{ .Values.prometheusRule.minTeams }}+ teams.
+              A drop this large means its section headers changed and members are being
+              attributed to the wrong team.
+
+        - alert: CoredevsSourceStale
+          expr: time() - coredevs_source_last_success_timestamp_seconds > {{ .Values.prometheusRule.staleAfterHours }} * 3600
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: coredevs {{`{{ $labels.source }}`}} has not fetched successfully
+            description: >-
+              No successful fetch in over {{ .Values.prometheusRule.staleAfterHours }}h. The last
+              good result is still being served, so the API looks healthy while going stale.
+
+        - alert: CoredevsIndexStale
+          expr: time() - coredevs_index_generated_timestamp_seconds > {{ .Values.prometheusRule.staleAfterHours }} * 3600
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: coredevs index has not been rebuilt
+            description: >-
+              The published index is over {{ .Values.prometheusRule.staleAfterHours }}h old.
+{{- end }}

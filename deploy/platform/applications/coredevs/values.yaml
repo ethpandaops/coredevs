@@ -79,6 +79,13 @@ serviceMonitor:
   enabled: true
   scrapeInterval: 30s
 
+prometheusRule:
+  enabled: true
+  # Floor for coredevs_source_teams{source="protocol-guild"}. Kept below the
+  # registry's mapped section count so normal churn upstream does not alert.
+  minTeams: 15
+  staleAfterHours: 12
+
 # Applies to the reader and writer pods.
 resources:
   requests:

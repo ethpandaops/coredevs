@@ -169,6 +169,25 @@ func startSyncing(ctx context.Context, logger *slog.Logger, cfg *config.Config, 
 	}
 
 	sync := syncer.New(logger, indexStore, sources, cfg.SyncInterval, cfg.SnapshotPath, floors, cfg.ExcludedHandles())
+
+	// Connected before the first sync so the writer can recover its starting
+	// point: its disk is ephemeral, so without this a restart while an upstream
+	// is broken would begin from nothing and republish a gutted index over the
+	// good one every reader is serving.
+	var pg *store.Store
+
+	if cfg.Cluster.Role == config.RoleWriter {
+		var err error
+
+		pg, err = store.New(ctx, logger, cfg.Cluster.DSN())
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		*cleanups = append(*cleanups, pg.Close)
+
+		sync.Seed(ctx, loadPublishedIndex(ctx, logger, pg))
+	}
+
 	if err := sync.Start(ctx); err != nil {
 		return nil, nil, nil, err
 	}
@@ -182,13 +201,7 @@ func startSyncing(ctx context.Context, logger *slog.Logger, cfg *config.Config, 
 		*cleanups = append(*cleanups, func() { _ = keyCache.Stop() })
 	}
 
-	if cfg.Cluster.Role == config.RoleWriter {
-		pg, err := store.New(ctx, logger, cfg.Cluster.DSN())
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		*cleanups = append(*cleanups, pg.Close)
-
+	if pg != nil {
 		pub := newPublisher(logger, pg, indexStore, keyCache, sync.Statuses, cfg.Cluster.Postgres.PublishInterval)
 		pub.Start(ctx)
 		*cleanups = append(*cleanups, pub.Stop)
@@ -233,6 +246,7 @@ func buildSources(logger *slog.Logger, cfg *config.Config, httpClient *http.Clie
 	if cfg.Sources.ProtocolGuild.Enabled {
 		sources = append(sources, protocolguild.New(
 			logger, httpClient, cfg.Sources.ProtocolGuild.URL, cfg.SectionTeams(),
+			cfg.Sources.ProtocolGuild.MaxMissingSections,
 		))
 	}
 

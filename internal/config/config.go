@@ -64,6 +64,12 @@ type ProtocolGuild struct {
 	// plenty of people but attributes them to the wrong team, which is what
 	// happens when the document renames its section headers. 0 disables it.
 	MinTeams int `yaml:"minTeams"`
+	// MaxMissingSections is how many configured section headers may be absent
+	// from the document before a fetch is treated as a failure. A header that
+	// disappears strands every member under it, so this catches a rename at the
+	// source rather than waiting for the resulting counts to look wrong. 0
+	// tolerates any number; the missing headers are always reported.
+	MaxMissingSections int `yaml:"maxMissingSections"`
 }
 
 // GitHubOrg configures the GitHub public-org-membership source.

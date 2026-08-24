@@ -1,0 +1,74 @@
+# Parses the live Protocol Guild document against the committed team registry.
+# An upstream restructure renames the section headers the parser keys on, which
+# strands every member underneath them without changing the totals enough to
+# look wrong — so it is caught here, on a schedule, rather than on the dashboard
+# weeks later.
+name: upstream
+
+on:
+  schedule:
+    - cron: '17 7 * * *'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'config.yaml'
+      - 'internal/source/protocolguild/**'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.24'
+          check-latest: true
+
+      - name: parse the live document
+        shell: bash
+        run: |
+          set -o pipefail
+          go test -tags upstream ./internal/source/protocolguild/ -run TestUpstream -v 2>&1 | tee canary.log
+
+      - name: report drift
+        if: failure() && github.event_name != 'pull_request'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          title='Protocol Guild document no longer matches the team registry'
+
+          gh label create upstream-drift --color B60205 \
+            --description 'The upstream Protocol Guild document has drifted from config.yaml' || true
+
+          existing=$(gh issue list --state open --label upstream-drift \
+            --search "$title in:title" --json number --jq '.[0].number // empty')
+
+          {
+            echo "The scheduled parse of the Protocol Guild membership document failed."
+            echo
+            echo "Its section headers are what \`protocolGuildSections\` in \`config.yaml\` keys on."
+            echo "When they are renamed, every member underneath them is attributed to whichever"
+            echo "header still matches, or dropped entirely."
+            echo
+            echo "Reconcile \`config.yaml\` with the document, then re-run this workflow."
+            echo
+            echo "[Workflow run]($RUN_URL)"
+            echo
+            echo '```'
+            tail -40 canary.log || true
+            echo '```'
+          } > body.md
+
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file body.md
+          else
+            gh issue create --title "$title" --label upstream-drift --body-file body.md
+          fi
