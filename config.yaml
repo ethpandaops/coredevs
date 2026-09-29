@@ -123,7 +123,7 @@ teams:
     layer: cl
     protocolGuildSections: [Lodestar (Chainsafe)]
     githubOrgs: [] # candidate: ChainSafe (multi-product company org)
-    members: [g11tech, philknows] # from glamsterdam-devnets (not in Protocol Guild)
+    members: [g11tech, markolazic01, philknows] # not in Protocol Guild
   nimbus:
     displayName: Nimbus
     kind: client
