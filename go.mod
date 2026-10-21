@@ -1,6 +1,6 @@
 module github.com/ethpandaops/coredevs
 
-go 1.24.1
+go 1.26.10
 
 require (
 	github.com/jackc/pgx/v5 v5.6.0
