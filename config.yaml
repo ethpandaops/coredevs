@@ -150,6 +150,11 @@ teams:
     kind: client
     layer: cl
     members: [ninaiiad, vladimir-ea, Bronek, alexX512, 0w3n-d]
+  ethlambda:
+    displayName: ethlambda
+    kind: client
+    layer: cl
+    members: [MegaRedHand, pablodeymo, ilitteri]
 
   # --- Execution clients ---
   besu:
