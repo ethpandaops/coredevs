@@ -145,6 +145,11 @@ teams:
     protocolGuildSections: [Teku (Consensys)]
     githubOrgs: [] # candidate: Consensys (whole-company org — broad)
     members: [] # Add manual github users here
+  silver:
+    displayName: Silver
+    kind: client
+    layer: cl
+    members: [ninaiad, vladimir-ea, Bronek, alexX512, 0w3n-d]
 
   # --- Execution clients ---
   besu:
