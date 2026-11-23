@@ -149,7 +149,7 @@ teams:
     displayName: Silver
     kind: client
     layer: cl
-    members: [ninaiad, vladimir-ea, Bronek, alexX512, 0w3n-d]
+    members: [ninaiiad, vladimir-ea, Bronek, alexX512, 0w3n-d]
 
   # --- Execution clients ---
   besu:
